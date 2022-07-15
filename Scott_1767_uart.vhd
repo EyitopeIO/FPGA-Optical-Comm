@@ -25,15 +25,14 @@ USE ieee.std_logic_1164.all;
 
 ENTITY uart IS
   GENERIC(
-    clk_freq  :  INTEGER    := 50_000_000;  --frequency of system clock in Hertz
-    baud_rate :  INTEGER    := 19_200;      --data link baud rate in bits/second
+    clk_freq  :  INTEGER    ;  --frequency of system clock in Hertz
+    baud_rate :  INTEGER    ;      --data link baud rate in bits/second
     os_rate   :  INTEGER    := 16;          --oversampling rate to find center of receive bits (in samples per baud period)
-    d_width   :  INTEGER    := 8;           --data bus width
+    d_width   :  INTEGER    ;           --data bus width
     parity    :  INTEGER    := 1;           --0 for no parity, 1 for parity
     parity_eo :  STD_LOGIC  := '0');        --'0' for even, '1' for odd parity
   PORT(
     clk      :  IN   STD_LOGIC;                             --system clock
-    reset_n  :  IN   STD_LOGIC;                             --ascynchronous reset
     tx_ena   :  IN   STD_LOGIC;                             --initiate transmission
     tx_data  :  IN   STD_LOGIC_VECTOR(d_width-1 DOWNTO 0);  --data to transmit
     rx       :  IN   STD_LOGIC;                             --receive pin
@@ -59,16 +58,11 @@ ARCHITECTURE logic OF uart IS
 BEGIN
 
   --generate clock enable pulses at the baud rate and the oversampling rate
-  PROCESS(reset_n, clk)
+  PROCESS(clk)
     VARIABLE count_baud :  INTEGER RANGE 0 TO clk_freq/baud_rate-1 := 0;         --counter to determine baud rate period
     VARIABLE count_os   :  INTEGER RANGE 0 TO clk_freq/baud_rate/os_rate-1 := 0; --counter to determine oversampling period
-  BEGIN
-    IF(reset_n = '0') THEN                            --asynchronous reset asserted
-      baud_pulse <= '0';                                --reset baud rate pulse
-      os_pulse <= '0';                                  --reset oversampling rate pulse
-      count_baud := 0;                                  --reset baud period counter
-      count_os := 0;                                    --reset oversampling period counter
-    ELSIF(clk'EVENT AND clk = '1') THEN
+  BEGIN                                   --reset oversampling period counter
+    IF(clk'EVENT AND clk = '1') THEN
       --create baud enable pulse
       IF(count_baud < clk_freq/baud_rate-1) THEN        --baud period not reached
         count_baud := count_baud + 1;                     --increment baud period counter
@@ -90,18 +84,11 @@ BEGIN
   END PROCESS;
 
   --receive state machine
-  PROCESS(reset_n, clk)
+  PROCESS(clk)
     VARIABLE rx_count :  INTEGER RANGE 0 TO parity+d_width+2 := 0; --count the bits received
     VARIABLE os_count :  INTEGER RANGE 0 TO os_rate-1 := 0;        --count the oversampling rate pulses
   BEGIN
-    IF(reset_n = '0') THEN                                 --asynchronous reset asserted
-      os_count := 0;                                         --clear oversampling pulse counter
-      rx_count := 0;                                         --clear receive bit counter
-      rx_busy <= '0';                                        --clear receive busy signal
-      rx_error <= '0';                                       --clear receive errors
-      rx_data <= (OTHERS => '0');                            --clear received data output
-      rx_state <= idle;                                      --put in idle state
-    ELSIF(clk'EVENT AND clk = '1' AND os_pulse = '1') THEN --enable clock at oversampling rate
+    IF(clk'EVENT AND clk = '1' AND os_pulse = '1') THEN --enable clock at oversampling rate
       CASE rx_state IS
         WHEN idle =>                                           --idle state
           rx_busy <= '0';                                        --clear receive busy flag
@@ -148,15 +135,10 @@ BEGIN
                     '0' WHEN OTHERS;                                          --not using parity
     
   --transmit state machine
-  PROCESS(reset_n, clk)
+  PROCESS(clk)
     VARIABLE tx_count :  INTEGER RANGE 0 TO parity+d_width+3 := 0;  --count bits transmitted
   BEGIN
-    IF(reset_n = '0') THEN                                    --asynchronous reset asserted
-      tx_count := 0;                                            --clear transmit bit counter
-      tx <= '1';                                                --set tx pin to idle value of high
-      tx_busy <= '1';                                           --set transmit busy signal to indicate unavailable
-      tx_state <= idle;                                         --set tx state machine to ready state
-    ELSIF(clk'EVENT AND clk = '1') THEN
+    IF(clk'EVENT AND clk = '1') THEN
       CASE tx_state IS
         WHEN idle =>                                              --idle state
           IF(tx_ena = '1') THEN                                     --new transaction latched in
