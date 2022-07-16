@@ -11,8 +11,8 @@ ENTITY clock_divider IS
 END clock_divider;
 
 
-ARCHITECTURE clock_architecture of clock_divider IS
-    SIGNAL line_1Hz:    std_logic := '0';
+ARCHITECTURE clock_architecture OF clock_divider IS
+    SIGNAL line_1Hz :   STD_LOGIC := '0';
 BEGIN
     clock_1Hz <= line_1Hz;
     
@@ -20,9 +20,9 @@ FREQ_1Hz:       PROCESS(clock_100MHz, line_1Hz)
         VARIABLE count_100000000:   UNSIGNED (25 DOWNTO 0)  := "10111110101111000010000000";  -- 1Hz clock : I have updated this to be a value of 50,000,000 rahter THEN 100,000,000 - Archie [NEW].
         VARIABLE counter_100000000: UNSIGNED (25 DOWNTO 0)  := "00000000000000000000000000";        
     BEGIN
-        IF (rising_edge(clock_100MHz)) THEN
+        IF (RISING_EDGE(clock_100MHz)) THEN
             IF (counter_100000000 = count_100000000) THEN            
-                line_1Hz <= not line_1Hz;
+                line_1Hz <= NOT line_1Hz;
                 counter_100000000 := "00000000000000000000000000";
             END IF;
             counter_100000000 := counter_100000000 + 1;
