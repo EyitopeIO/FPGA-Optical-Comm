@@ -4,9 +4,9 @@ USE IEEE.STD_LOGIC_1164.ALL;
 USE IEEE.NUMERIC_STD.ALL;
 
 ENTITY clock_divider IS
-    port (
-        clock_100MHz    :   IN std_logic;
-        clock_1Hz       :   OUT std_logic
+    PORT (
+        clock_100MHz    :   IN STD_lOGIC;
+        clock_1Hz       :   OUT STD_lOGIC
     );
 END clock_divider;
 
