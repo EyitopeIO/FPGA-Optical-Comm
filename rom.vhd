@@ -22,7 +22,7 @@ ARCHITECTURE romarch OF rom IS
         x"7D"
     );
 BEGIN
-    data_out <= bytesel(TO_INTEGER(UNSIGNED(addr))) ;
+    data_out <= bytesel(TO_INTEGER(UNSIGNED(addr))) WHEN UNSIGNED(addr) < 46 ELSE x"FF" ;
 END romarch ;
                             
 
