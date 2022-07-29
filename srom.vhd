@@ -2,6 +2,7 @@ LIBRARY IEEE;
 USE IEEE.STD_LOGIC_1164.ALL;
 USE IEEE.NUMERIC_STD.ALL;
 
+
 ENTITY srom IS
     PORT (
         data : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; --make a process sensitive to this

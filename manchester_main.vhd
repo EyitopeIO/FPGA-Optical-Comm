@@ -8,31 +8,24 @@ ENTITY main IS
         master_clock        :   NATURAL     := 100_000_000;
         data_bus_width      :   NATURAL     := 16;
         ascii_gen_bus_width :   NATURAL     := 8;   --ideally should by related to data_bus_width by formula
-        uart_baud_rate      :   INTEGER     := 9600
+        uart_baud_rate      :   INTEGER     := 9600;
+        memory_size         :   INTEGER     := 46
     );
     
     PORT (
         clock:      IN STD_LOGIC;
-        reset:      IN STD_LOGIC;
-        clock_sel:  IN STD_LOGIC;
-        man1_out:   OUT STD_LOGIC;
-        man2_out:   OUT STD_LOGIC
+        reset:      IN STD_LOGIC; --assign to button
+        man1_out:   OUT STD_LOGIC; --connect to high speed port
+        man2_out:   OUT STD_LOGIC;
+        start_tx : IN STD_LOGIC;
+        led_tx : OUT STD_LOGIC;
+        led_tx_error : OUT STD_LOGIC
     );
     
 END main;
 
 
 ARCHITECTURE monarch OF main IS
-
-    COMPONENT ascii_gen IS
-        GENERIC (
-            data_bus_width  :   NATURAL     --defined IN top module
-        ); 
-        PORT (
-            rand:   OUT std_logic_vector(data_bus_width-1 DOWNTO 0);
-            clock:  IN STD_LOGIC
-        );
-    END COMPONENT;
 
     COMPONENT encode IS 
     Port (
@@ -46,6 +39,15 @@ ARCHITECTURE monarch OF main IS
       );
     END COMPONENT;
 
+    COMPONENT srom IS
+    PORT (
+        data : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; --make a process sensitive to this
+        readme : OUT STD_LOGIC ;
+        clock : IN STD_LOGIC ;
+        reset : IN STD_lOGIC    --keep high to prevent data read
+    );
+    END COMPONENT;
+
     COMPONENT clock_divider IS
     PORT (
         clock_100MHz : IN STD_lOGIC;
@@ -54,15 +56,12 @@ ARCHITECTURE monarch OF main IS
     );
     END COMPONENT ;
     
-    SIGNAL global_reset_line : STD_LOGIC ;
+    SIGNAL global_reset_line : STD_LOGIC := '0' ;
     SIGNAL master_clock_line : STD_LOGIC ;
     SIGNAL clock_50MHz_line : STD_LOGIC ;
     SIGNAL clock_1Hz_line : STD_LOGIC ;
     
-    SIGNAL data_bus_line_for_randomgen1:         STD_LOGIC_VECTOR(ascii_gen_bus_width-1 DOWNTO 0);    --allow 0 - 255 random numbers only
-
-    SIGNAL manchester1_write_control :    STD_LOGIC := '0' ;
-    SIGNAL manchester2_write_control :    STD_LOGIC := '0' ;
+    SIGNAL manchester_begin_transmission : STD_LOGIC := '0' ;
     
     SIGNAL manchester1_ready_for_data_on_din : STD_LOGIC ;
     SIGNAL manchester2_ready_for_data_on_din : STD_LOGIC ;
@@ -73,87 +72,88 @@ ARCHITECTURE monarch OF main IS
     SIGNAL data_bus_line_for_man1_transmission:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0);
     SIGNAL data_bus_line_for_man2_transmission:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0);     
 
-    SIGNAL main_data_bus_line_for_all : STD_LOGIC_VECTOR(31 DOWNTO 0) := "01010101010101010100111010101011" ; --arbitrary number
-    
-    SIGNAL data_bus_for_asciigen : STD_LOGIC_VECTOR(ascii_gen_bus_width-1 DOWNTO 0) ;
-    
-    TYPE BYTESEL IS (ZERO, ONE, TWO, THREE) ;
-    SIGNAL BYTE : BYTESEL := ZERO ;
+--    SIGNAL data_bus_line_for_man1_reception:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0);
+--    SIGNAL data_bus_line_for_man2_reception:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0); 
+
+    SIGNAL main_data_bus_line_for_all_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
+    --SIGNAL main_data_bus_line_for_all_in : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
+    SIGNAL temp_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
+
+    --SIGNAL small_data_bus : STD_LOGIC_VECTOR(7 DOWNTO 0) ;
+    SIGNAL srom_reset : STD_LOGIC := '0' ;
+    SIGNAL srom_readme : STD_LOGIC ;
 
 BEGIN
 
-CLOCK_SELECT:    PROCESS(master_clock_line, clock_50MHz_line, clock_1Hz_line)
-    BEGIN
-        IF clock_sel = '1' THEN
-            master_clock_line <= clock_50MHz_line ;
-        ELSE
-            master_clock_line <= clock_1Hz_line ;
-        END IF ;
-    END PROCESS ;
-      
-TRANSMISSION1:    PROCESS(master_clock_line, main_data_bus_line_for_all)
-    BEGIN
-        IF RISING_EDGE(master_clock_line) THEN
-            IF manchester1_ready_for_data_on_din = '1' AND manchester1_overrun_error = '0' THEN
-                manchester1_write_control <= '1' ; 
-                data_bus_line_for_man1_transmission <= main_data_bus_line_for_all(31 DOWNTO 16) ;
-            ELSE
-                manchester1_write_control <= '0' ;
-            END IF ;
-        END IF ;
-    END PROCESS ;
+    data_bus_line_for_man2_transmission <= main_data_bus_line_for_all_out(31 DOWNTO 16) ;
+    data_bus_line_for_man1_transmission <= main_data_bus_line_for_all_out(15 DOWNTO 0) ;
 
-TRANSMISSION2:  PROCESS(master_clock_line, main_data_bus_line_for_all)
-    BEGIN
-        IF RISING_EDGE(master_clock_line) THEN
-            IF manchester2_ready_for_data_on_din = '1' AND manchester2_overrun_error = '0' THEN
-                manchester2_write_control <= '1' ; 
-                data_bus_line_for_man2_transmission <= main_data_bus_line_for_all(15 DOWNTO 0) ;
-            ELSE
-                manchester2_write_control <= '0' ;
-            END IF ;
-        END IF ;
-    END PROCESS ;   
+    master_clock_line <= clock ;
 
-DATABUS_LOADING: PROCESS (master_clock_line, data_bus_for_asciigen)
-    BEGIN
-        IF RISING_EDGE(master_clock_line) THEN
-            CASE BYTE IS
-                WHEN ZERO =>
-                    main_data_bus_line_for_all(7 DOWNTO 0) <= data_bus_for_asciigen;
-                    BYTE <= ONE ;
-                WHEN ONE =>
-                    main_data_bus_line_for_all(15 DOWNTO 8) <= data_bus_for_asciigen;
-                    BYTE <= TWO ;  
-                WHEN TWO =>
-                    main_data_bus_line_for_all(23 DOWNTO 16) <= data_bus_for_asciigen;
-                    BYTE <= THREE ;
-                WHEN THREE =>
-                    main_data_bus_line_for_all(31 DOWNTO 24) <= data_bus_for_asciigen;
-                    BYTE <= ZERO ;
-            END CASE ;
-        END IF ;
-    END PROCESS;
-      
-    
 -------------------------------------------------------------------------------------------------------
 -------------------------------------  PORT MAPS ------------------------------------------------------
 -------------------------------------------------------------------------------------------------------
 
+MAIN: PROCESS(master_clock_line)
+    BEGIN
+      
+        IF (reset='1') THEN
+            srom_reset <= '1' ;
+            global_reset_line <= '1' ;
+            
+        ELSIF (start_tx='1') THEN
+            IF (master_clock_line'EVENT AND master_clock_line='1') THEN
+                srom_reset <= '0' ;
+                global_reset_line <= '0' ;
+                
+                IF (srom_readme='1') THEN
+                    IF (manchester1_ready_for_data_on_din='1' AND manchester2_ready_for_data_on_din='1') THEN   
+                        manchester_begin_transmission <= '1' ;  --will cause manchester encoder to latch the main data bus                 
+                    ELSE
+                        manchester_begin_transmission <= '0' ;
+                    END IF;                 
+                END IF;
+                
+            END IF;
+        END IF;
+
+    END PROCESS;
+            
+
+STATUSLED: PROCESS(main_data_bus_line_for_all_out, manchester_begin_transmission, manchester1_overrun_error, manchester2_overrun_error)
+    BEGIN
+    
+        IF (main_data_bus_line_for_all_out=x"00000000") THEN
+            led_tx <= '1' ;
+        ELSIF (main_data_bus_line_for_all_out=x"FFFFFFFF") THEN
+            led_tx <= '0' ;
+        END IF;
+        
+        IF (manchester1_overrun_error='1' OR manchester2_overrun_error='1') THEN
+            led_tx_error <= '1' ;
+        ELSE
+            led_tx_error <= '0' ;
+        END IF;
+        
+    END PROCESS;
+
 CLOCKDIV: clock_divider
 PORT MAP (clock_100MHz => clock, clock_50MHz => clock_50MHz_line, clock_1Hz => clock_1Hz_line) ;
 
-DATASRC: ascii_gen
-GENERIC MAP ( data_bus_width => ascii_gen_bus_width )
-PORT MAP (rand=>data_bus_for_asciigen, clock=>master_clock_line) ;
-
+DATASRC: srom
+PORT MAP (
+    data => main_data_bus_line_for_all_out,
+    clock => clock_50MHz_line, --Don't want this faster than the manchester encoder
+    reset => srom_reset,
+    readme => srom_readme
+);
 
 MANENCODE1: encode
 PORT MAP (
-    clk16x=>master_clock_line,
-    srst=>reset,
+    clk16x=>clock_50MHz_line,
+    srst=>global_reset_line,
     tx_data=>data_bus_line_for_man1_transmission,
-    tx_stb=>manchester1_write_control,
+    tx_stb=>manchester_begin_transmission,
     txd=>man1_out,
     or_err=> manchester1_overrun_error,
     tx_idle=>manchester1_ready_for_data_on_din
@@ -161,10 +161,10 @@ PORT MAP (
 
 MANENCODE2: encode
 PORT MAP (
-    clk16x=>master_clock_line,
-    srst=>reset,
+    clk16x=>clock_50MHz_line,
+    srst=>global_reset_line,
     tx_data=>data_bus_line_for_man2_transmission,
-    tx_stb=>manchester2_write_control,
+    tx_stb=>manchester_begin_transmission,
     txd=>man2_out,
     or_err=> manchester2_overrun_error,
     tx_idle=>manchester2_ready_for_data_on_din
