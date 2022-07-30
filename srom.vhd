@@ -25,28 +25,22 @@ ARCHITECTURE srarch OF srom IS
 
     SIGNAL address_bus : STD_LOGIC_VECTOR(3 DOWNTO 0) ; --Address bus dependent on variable cnt. Don't initialise this
     SIGNAL data_bus : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
-    SIGNAL init_line : STD_LOGIC := '0' ;
             
 BEGIN
 
-    
 ROMSOURCING: PROCESS(clock)
         VARIABLE cnt : INTEGER RANGE 0 TO 12 := 0 ;
     BEGIN 
     
         address_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(cnt, 4)) ;
-        data <= data_bus ;
          
-        IF (init_line='0') THEN    
-            data <= x"00000000" ;
-            init_line <= '1';
-            
-        ELSIF (reset = '1') THEN  
+        IF (reset = '1') THEN  
             data <= x"00000000" ;
             cnt := 0 ;
                    
         ELSIF (clock'EVENT AND clock='1') THEN
             IF (querry='1') THEN
+                data <= data_bus ;
                 IF (cnt < 12) THEN  -- address above 11 causes FF... on data bus
                     cnt := cnt + 1 ;
                 END IF;
