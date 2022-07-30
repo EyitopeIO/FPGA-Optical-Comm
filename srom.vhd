@@ -35,6 +35,7 @@ ROMSOURCING: PROCESS(clock)
     BEGIN 
     
         address_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(cnt, 4)) ;
+        data <= data_bus ;
          
         IF (init_line='0') THEN    
             data <= x"00000000" ;
@@ -46,8 +47,7 @@ ROMSOURCING: PROCESS(clock)
                    
         ELSIF (clock'EVENT AND clock='1') THEN
             IF (querry='1') THEN
-                data <= data_bus ;
-                IF (cnt < 12) THEN  --don't allow counting beyond max
+                IF (cnt < 12) THEN  -- address above 11 causes FF... on data bus
                     cnt := cnt + 1 ;
                 END IF;
             END IF;
