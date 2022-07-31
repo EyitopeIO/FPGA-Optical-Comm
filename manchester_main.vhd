@@ -14,12 +14,21 @@ ENTITY main IS
     
     PORT (
         clock:      IN STD_LOGIC;
-        reset:      IN STD_LOGIC; --assign to button
         man1_out:   OUT STD_LOGIC; --connect to high speed port
         man2_out:   OUT STD_LOGIC;
-        start_tx : IN STD_LOGIC;
-        led_tx : OUT STD_LOGIC;
-        led_tx_error : OUT STD_LOGIC
+        
+        start_tx : IN STD_LOGIC; --send 46 bytes once
+        reset :      IN STD_LOGIC; 
+        
+        test_tout : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; 
+        test_man1 : OUT STD_LOGIC;
+        test_man2 : OUT STD_LOGIC;
+        test_querry : OUT STD_LOGIC;
+        test_manbeg : OUT STD_LOGIC;
+        
+        led_idle : OUT STD_LOGIC
+--        led_tx : OUT STD_LOGIC;
+--        led_tx_error : OUT STD_LOGIC ;
     );
     
 END main;
@@ -42,7 +51,7 @@ ARCHITECTURE monarch OF main IS
     COMPONENT srom IS
     PORT (
         data : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; --make a process sensitive to this
-        readme : OUT STD_LOGIC ;
+        querry : IN STD_LOGIC ;
         clock : IN STD_LOGIC ;
         reset : IN STD_lOGIC    --keep high to prevent data read
     );
@@ -52,14 +61,16 @@ ARCHITECTURE monarch OF main IS
     PORT (
         clock_100MHz : IN STD_lOGIC;
         clock_50MHz : OUT STD_LOGIC ;
+        clock_10MHz : OUT STD_LOGIC ;
         clock_1Hz : OUT STD_lOGIC
     );
     END COMPONENT ;
     
     SIGNAL global_reset_line : STD_LOGIC := '0' ;
-    SIGNAL master_clock_line : STD_LOGIC ;
-    SIGNAL clock_50MHz_line : STD_LOGIC ;
-    SIGNAL clock_1Hz_line : STD_LOGIC ;
+    SIGNAL idle_line : STD_LOGIC := '1' ;
+    SIGNAL init_line : STD_LOGIC := '0' ;
+    
+    SIGNAL clock_10MHz_line : STD_LOGIC ;
     
     SIGNAL manchester_begin_transmission : STD_LOGIC := '0' ;
     
@@ -76,98 +87,165 @@ ARCHITECTURE monarch OF main IS
 --    SIGNAL data_bus_line_for_man2_reception:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0); 
 
     SIGNAL main_data_bus_line_for_all_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
+    SIGNAL temp_trans_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
+
     --SIGNAL main_data_bus_line_for_all_in : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
-    SIGNAL temp_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
 
     --SIGNAL small_data_bus : STD_LOGIC_VECTOR(7 DOWNTO 0) ;
-    SIGNAL srom_reset : STD_LOGIC := '0' ;
-    SIGNAL srom_readme : STD_LOGIC ;
-
+    SIGNAL srom_reset : STD_LOGIC ;
+    SIGNAL srom_querry : STD_LOGIC ; 
+    
+    SIGNAL txaction : UNSIGNED(2 DOWNTO 0) := "000" ;
+    
 BEGIN
 
-    data_bus_line_for_man2_transmission <= main_data_bus_line_for_all_out(31 DOWNTO 16) ;
-    data_bus_line_for_man1_transmission <= main_data_bus_line_for_all_out(15 DOWNTO 0) ;
+    -- MSB first in data
+    data_bus_line_for_man2_transmission <= main_data_bus_line_for_all_out(15 DOWNTO 0) ; 
+    data_bus_line_for_man1_transmission <= main_data_bus_line_for_all_out(31 DOWNTO 16) ;
+    
+    --srom_clock <= clock WHEN srom_clock_selector='1' ELSE '1' ;
+    
+    test_man1 <= manchester1_ready_for_data_on_din ;
+    test_man2 <= manchester2_ready_for_data_on_din ;
+    test_querry <= srom_querry ;
+    test_manbeg <= manchester_begin_transmission ;
+ 
+ 
+--NEXTBYTE: PROCESS(clock, txaction)
+--    VARIABLE jump : UNSIGNED(1 DOWNTO 0) := "00" ;
+--    BEGIN
+--        IF (clock'EVENT AND clock='1') THEN
+--            CASE jump IS
+--                WHEN "00" =>  --turn srom_on
+--                    srom_querry <= '0' ;
+--                    jump <= "10" ;
+--                WHEN "11" =>
+--                    srom_querry <= '1'
+--                    jump <= "11" ;
+--                WHEN "10" =>
+--                    IF (srom_querry='0') THEN
+--                        jump <= "00" ;
+--                    ELSE
+--                        jump <= "11" ;
+--                    END IF;
+--            END CASE;
+--        END IF;                 
+--    END PROCESS;
+    
+    
+MAIN: PROCESS(clock, reset)
+--        VARIABLE srom_count : INTEGER RANGE 0 TO 1 := 0 ;
+    BEGIN     
+        main_data_bus_line_for_all_out <= temp_trans_out ;
+        test_tout <= temp_trans_out ;
+        
+        IF (init_line='0' OR reset='1') THEN  --Self reset on startup   
+            srom_reset <= '1' ;
+            srom_querry <= '0' ;
+            manchester_begin_transmission <= '0' ;
+            global_reset_line <= '1' ;
+            init_line <= '1' ;
+            
+        ELSIF (clock='1') THEN
+        
+--            IF (srom_count < 1) THEN
+--                srom_count := srom_count + 1 ;
+--            ELSE
+--                srom_count := 0 ;
+--                srom_querry <= '0' ;
+--            END IF;
+            
+            CASE txaction IS    
+                WHEN "000" =>    --Ready to begin transmission
+                    IF (start_tx = '1') THEN
+                        srom_reset <= '0' ;
+                        srom_querry <= '1' ;
+                        global_reset_line <= '0' ;
+                        manchester_begin_transmission <= '0' ;
+                        led_idle <= '0' ;
+                        txaction <= "001" ;
+                    END IF;
+                                     
+                WHEN "001" =>    --First entrance
+                    manchester_begin_transmission <= '1' ;
+                    srom_querry <= '0' ;
+                    txaction <= "010" ;
 
-    master_clock_line <= clock ;
+                WHEN "010" =>   --Wait for manchester to < begin > sending its data, or high to low
+                
+                    srom_querry <= '0' ;
+                    
+                    IF (manchester1_ready_for_data_on_din='0' OR manchester2_ready_for_data_on_din='0') THEN
+                        manchester_begin_transmission <= '0' ;
+                        txaction <= "011" ;
+                    END IF;                
+                                
+                WHEN "011" =>   --Wait for manchester to < finish > sending data, or low to high                                                                             
+                    IF (manchester1_ready_for_data_on_din='1' OR manchester2_ready_for_data_on_din='1') THEN
+                        manchester_begin_transmission <= '1' ;
+                        txaction <= "100" ;
+                    END IF;
+                                                                                             
+                    IF (main_data_bus_line_for_all_out = x"FFFFFFFF") THEN
+                        txaction <= "111" ;
+                    END IF;                                  
+                    
+                WHEN "100" =>   --Load data bus2
+                    srom_querry <= '1' ;
+                    txaction <= "010" ;
+                
+                WHEN OTHERS =>
+                    manchester_begin_transmission <= '0' ;                           
+                    led_idle <= '1' ; 
+                                     
+            END CASE;
+        END IF;
+    END PROCESS;          
+
 
 -------------------------------------------------------------------------------------------------------
 -------------------------------------  PORT MAPS ------------------------------------------------------
 -------------------------------------------------------------------------------------------------------
 
-MAIN: PROCESS(master_clock_line)
-    BEGIN
-      
-        IF (reset='1') THEN
-            srom_reset <= '1' ;
-            global_reset_line <= '1' ;
-            
-        ELSIF (start_tx='1') THEN
-            IF (master_clock_line'EVENT AND master_clock_line='1') THEN
-                srom_reset <= '0' ;
-                global_reset_line <= '0' ;
-                
-                IF (srom_readme='1') THEN
-                    IF (manchester1_ready_for_data_on_din='1' AND manchester2_ready_for_data_on_din='1') THEN   
-                        manchester_begin_transmission <= '1' ;  --will cause manchester encoder to latch the main data bus                 
-                    ELSE
-                        manchester_begin_transmission <= '0' ;
-                    END IF;                 
-                END IF;
-                
-            END IF;
-        END IF;
-
-    END PROCESS;
-            
-
-STATUSLED: PROCESS(main_data_bus_line_for_all_out, manchester_begin_transmission, manchester1_overrun_error, manchester2_overrun_error)
-    BEGIN
-    
-        IF (main_data_bus_line_for_all_out=x"00000000") THEN
-            led_tx <= '1' ;
-        ELSIF (main_data_bus_line_for_all_out=x"FFFFFFFF") THEN
-            led_tx <= '0' ;
-        END IF;
-        
-        IF (manchester1_overrun_error='1' OR manchester2_overrun_error='1') THEN
-            led_tx_error <= '1' ;
-        ELSE
-            led_tx_error <= '0' ;
-        END IF;
-        
-    END PROCESS;
-
 CLOCKDIV: clock_divider
-PORT MAP (clock_100MHz => clock, clock_50MHz => clock_50MHz_line, clock_1Hz => clock_1Hz_line) ;
+PORT MAP (
+    clock_100MHz => clock,
+    clock_50MHz => OPEN,
+    clock_10MHz => clock_10MHz_line,
+    clock_1Hz => OPEN
+);
 
 DATASRC: srom
 PORT MAP (
-    data => main_data_bus_line_for_all_out,
-    clock => clock_50MHz_line, --Don't want this faster than the manchester encoder
+    data => temp_trans_out,
+    
+    --Don't want this slower than the manchester encoder. It must always be ready for Manchester/
+    clock => clock, 
+    
     reset => srom_reset,
-    readme => srom_readme
+    querry => srom_querry
 );
 
 MANENCODE1: encode
 PORT MAP (
-    clk16x=>clock_50MHz_line,
-    srst=>global_reset_line,
-    tx_data=>data_bus_line_for_man1_transmission,
-    tx_stb=>manchester_begin_transmission,
-    txd=>man1_out,
-    or_err=> manchester1_overrun_error,
-    tx_idle=>manchester1_ready_for_data_on_din
+    clk16x => clock,
+    srst => global_reset_line,
+    tx_data => data_bus_line_for_man1_transmission,
+    tx_stb => manchester_begin_transmission,
+    txd => man1_out,
+    or_err => manchester1_overrun_error,
+    tx_idle => manchester1_ready_for_data_on_din
 );
 
 MANENCODE2: encode
 PORT MAP (
-    clk16x=>clock_50MHz_line,
-    srst=>global_reset_line,
-    tx_data=>data_bus_line_for_man2_transmission,
-    tx_stb=>manchester_begin_transmission,
-    txd=>man2_out,
-    or_err=> manchester2_overrun_error,
-    tx_idle=>manchester2_ready_for_data_on_din
+    clk16x => clock,
+    srst => global_reset_line,
+    tx_data => data_bus_line_for_man2_transmission,
+    tx_stb => manchester_begin_transmission,
+    txd => man2_out,
+    or_err => manchester2_overrun_error,
+    tx_idle => manchester2_ready_for_data_on_din
 );
 
 END monarch;
