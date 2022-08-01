@@ -31,13 +31,13 @@ begin
         test_manbeg => test_manbeg 
     );
     
-    tx_Mode <= '0' after 5 ns, '1' after 10 ns ;
-    start_tx <= '1' after 100 ns ;
-    reset <= '0' after 50 ns ;
+    tx_mode <= '0' after 10 ns, '1' after 1_000_000 ns ;
+    start_tx <= '1' after 10 ns, '0' after 1_000_000 ns ; 
+    reset <= '0' after 10 ns, '1' after 1_000_000 ns, '0' after 1_000_010 ns ;
 
     CLK: PROCESS
     BEGIN
-        FOR i IN 0 TO 10_000_000 LOOP
+        FOR i IN 0 TO 100_000_000 LOOP
             clock <= not clock ;
             wait for 10 ns ;
         END LOOP;
