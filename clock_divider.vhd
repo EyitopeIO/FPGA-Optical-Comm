@@ -7,7 +7,7 @@ ENTITY clock_divider IS
     PORT (
         clock_100MHz    :   IN STD_lOGIC;
         clock_10MHz : OUT STD_LOGIC ;
-        clock_10kHz : OUT STD_LOGIC ;
+        clock_70kHz : OUT STD_LOGIC ;
         clock_1Hz:   OUT STD_lOGIC
     );
 END clock_divider;
@@ -15,11 +15,11 @@ END clock_divider;
 
 ARCHITECTURE clock_architecture OF clock_divider IS
     SIGNAL line_1Hz :   STD_LOGIC := '0' ;
-    SIGNAL line_10kHz : STD_LOGIC := '0' ;
+    SIGNAL line_70kHz : STD_LOGIC := '0' ;
     SIGNAL line_10MHz : STD_LOGIC := '0' ;
 BEGIN
     clock_1Hz <= line_1Hz ;
-    clock_10kHz <= line_10kHz ;
+    clock_70kHz <= line_70kHz ;
     clock_10MHz <= line_10MHz ;
    
     
@@ -36,23 +36,23 @@ FREQ_1Hz:       PROCESS(clock_100MHz)
         END IF;
     END PROCESS;
 
-FREQ_10kHz: PROCESS(clock_100MHz)
-        VARIABLE count_10_000 : INTEGER RANGE 0 TO 2 := 2 ; -- 0 to 1 DEC 
-        VARIABLE counter_10_000 : INTEGER RANGE 0 TO 2 := 0 ;   
+FREQ_70kHz: PROCESS(clock_100MHz)
+        VARIABLE count_70_000 : INTEGER RANGE 0 TO 715 := 715 ; -- 100MHz div. 70kHz ~~ 1420
+        VARIABLE counter_70_000 : INTEGER RANGE 0 TO 715 := 0 ;   
     BEGIN
         IF (clock_100MHz'EVENT AND clock_100MHz='1') THEN
-            IF (counter_10_000 = (count_10_000 - 1)) THEN
-                line_10kHz <= not line_10kHz ;
-                counter_10_000 := 0 ;
+            IF (counter_70_000 = (count_70_000 - 1)) THEN
+                line_70kHz <= not line_70kHz ;
+                counter_70_000 := 0 ;
             END IF ;
-            counter_10_000 := counter_10_000 + 1 ;
+            counter_70_000 := counter_70_000 + 1 ;
         END IF ;
     END PROCESS ;
     
-    
-FREQ_10MHz: PROCESS(clock_100MHz)
-            VARIABLE count_10_000_000 : INTEGER RANGE 0 TO 10 := 9 ; -- 0 to 9 DEC
-            VARIABLE counter_10_000_000 : INTEGER RANGE 0 TO 10 := 0 ;   
+    -- Clock for something around (not accurate) 1.3615MHz. The manchester encoder used requires an input clock of 19.45 * output data clock 
+FREQ_1p3615MHz: PROCESS(clock_100MHz)
+            VARIABLE count_10_000_000 : INTEGER RANGE 0 TO 45 := 45 ; -- 0 to 9 DEC 73 dev. 2 ~~ 36, but using 45
+            VARIABLE counter_10_000_000 : INTEGER RANGE 0 TO 45 := 0 ;   
         BEGIN
             IF (clock_100MHz'EVENT AND clock_100MHz='1') THEN
                 IF (counter_10_000_000 = (count_10_000_000 - 1)) THEN
