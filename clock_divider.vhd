@@ -6,8 +6,8 @@ USE IEEE.NUMERIC_STD.ALL;
 ENTITY clock_divider IS
     PORT (
         clock_100MHz    :   IN STD_lOGIC;
-        clock_50MHz : OUT STD_LOGIC ;
         clock_10MHz : OUT STD_LOGIC ;
+        clock_10kHz : OUT STD_LOGIC ;
         clock_1Hz:   OUT STD_lOGIC
     );
 END clock_divider;
@@ -15,11 +15,11 @@ END clock_divider;
 
 ARCHITECTURE clock_architecture OF clock_divider IS
     SIGNAL line_1Hz :   STD_LOGIC := '0' ;
-    SIGNAL line_50MHz : STD_LOGIC := '0' ;
+    SIGNAL line_10kHz : STD_LOGIC := '0' ;
     SIGNAL line_10MHz : STD_LOGIC := '0' ;
 BEGIN
     clock_1Hz <= line_1Hz ;
-    clock_50MHz <= line_50MHz ;
+    clock_10kHz <= line_10kHz ;
     clock_10MHz <= line_10MHz ;
    
     
@@ -36,17 +36,16 @@ FREQ_1Hz:       PROCESS(clock_100MHz)
         END IF;
     END PROCESS;
 
-
-FREQ_50MHz: PROCESS(clock_100MHz)
-        VARIABLE count_50000000 : INTEGER RANGE 0 TO 2 := 2 ; -- 0 to 1 DEC 
-        VARIABLE counter_50000000 : INTEGER RANGE 0 TO 2 := 0 ;   
+FREQ_10kHz: PROCESS(clock_100MHz)
+        VARIABLE count_10_000 : INTEGER RANGE 0 TO 2 := 2 ; -- 0 to 1 DEC 
+        VARIABLE counter_10_000 : INTEGER RANGE 0 TO 2 := 0 ;   
     BEGIN
         IF (clock_100MHz'EVENT AND clock_100MHz='1') THEN
-            IF (counter_50000000 = (count_50000000 - 1)) THEN
-                line_50MHz <= not line_50MHz ;
-                counter_50000000 := 0 ;
+            IF (counter_10_000 = (count_10_000 - 1)) THEN
+                line_10kHz <= not line_10kHz ;
+                counter_10_000 := 0 ;
             END IF ;
-            counter_50000000 := counter_50000000 + 1 ;
+            counter_10_000 := counter_10_000 + 1 ;
         END IF ;
     END PROCESS ;
     

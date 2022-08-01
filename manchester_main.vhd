@@ -61,17 +61,17 @@ ARCHITECTURE monarch OF main IS
     COMPONENT clock_divider IS
     PORT (
         clock_100MHz : IN STD_lOGIC;
-        clock_50MHz : OUT STD_LOGIC ;
         clock_10MHz : OUT STD_LOGIC ;
+        clock_10kHz : OUT STD_LOGIC ;
         clock_1Hz : OUT STD_lOGIC
     );
     END COMPONENT ;
     
     SIGNAL global_reset_line : STD_LOGIC := '0' ;
-    SIGNAL idle_line : STD_LOGIC := '1' ;
     SIGNAL init_line : STD_LOGIC := '0' ;
     
     SIGNAL clock_10MHz_line : STD_LOGIC ;
+    SIGNAL clock_10kHz_line : STD_LOGIC ;
     
     SIGNAL manchester_begin_transmission : STD_LOGIC := '0' ;
     
@@ -120,6 +120,7 @@ MAIN: PROCESS(clock, reset)
             srom_querry <= '0' ;
             manchester_begin_transmission <= '0' ;
             global_reset_line <= '1' ;
+            led_idle <= '0' ;
             init_line <= '1' ;
             txaction <= "000" ;
             
@@ -177,7 +178,9 @@ MAIN: PROCESS(clock, reset)
                     led_idle <= '1' ; 
                                      
             END CASE;
+            
         END IF;
+        
     END PROCESS;          
 
 
@@ -188,8 +191,8 @@ MAIN: PROCESS(clock, reset)
 CLOCKDIV: clock_divider
 PORT MAP (
     clock_100MHz => clock,
-    clock_50MHz => OPEN,
     clock_10MHz => clock_10MHz_line,
+    clock_10kHz => clock_10kHz_line, 
     clock_1Hz => OPEN
 );
 
@@ -206,7 +209,7 @@ PORT MAP (
 
 MANENCODE1: encode
 PORT MAP (
-    clk16x => clock,
+    clk16x => clock_10kHz_line,
     srst => global_reset_line,
     tx_data => data_bus_line_for_man1_transmission,
     tx_stb => manchester_begin_transmission,
@@ -217,7 +220,7 @@ PORT MAP (
 
 MANENCODE2: encode
 PORT MAP (
-    clk16x => clock,
+    clk16x => clock_10kHz_line,
     srst => global_reset_line,
     tx_data => data_bus_line_for_man2_transmission,
     tx_stb => manchester_begin_transmission,
