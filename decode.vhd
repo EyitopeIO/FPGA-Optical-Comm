@@ -54,7 +54,7 @@ entity decode is
 end decode;
 
 architecture rtl of decode is
-  signal shifter : std_logic_vector(15 downto 0);
+  signal shifter : std_logic_vector(15 downto 0) := x"0000";
   signal tick_cnt : integer range 0 to 31 := 0;
   signal bit_cnt : integer range 0 to 15 := 0;
   signal rcv_stb : std_logic := '0';
