@@ -18,17 +18,18 @@ ENTITY main IS
         man2_out:   OUT STD_LOGIC;
         
         start_tx : IN STD_LOGIC; --send 46 bytes once
+        tx_mode : IN STD_LOGIC;
         reset :      IN STD_LOGIC; 
         
-        test_tout : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; 
-        test_man1 : OUT STD_LOGIC;
-        test_man2 : OUT STD_LOGIC;
-        test_querry : OUT STD_LOGIC;
-        test_manbeg : OUT STD_LOGIC;
+--         test_tout : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; 
+--         test_man1 : OUT STD_LOGIC;
+--         test_man2 : OUT STD_LOGIC;
+--         test_querry : OUT STD_LOGIC;
+--         test_manbeg : OUT STD_LOGIC;
         
         led_idle : OUT STD_LOGIC
---        led_tx : OUT STD_LOGIC;
---        led_tx_error : OUT STD_LOGIC ;
+        -- led_tx : OUT STD_LOGIC;
+        -- led_tx_error : OUT STD_LOGIC ;
     );
     
 END main;
@@ -60,20 +61,23 @@ ARCHITECTURE monarch OF main IS
     COMPONENT clock_divider IS
     PORT (
         clock_100MHz : IN STD_lOGIC;
-        clock_50MHz : OUT STD_LOGIC ;
         clock_10MHz : OUT STD_LOGIC ;
+        clock_70kHz : OUT STD_LOGIC ;
         clock_1Hz : OUT STD_lOGIC
     );
     END COMPONENT ;
     
     SIGNAL global_reset_line : STD_LOGIC := '0' ;
-    SIGNAL idle_line : STD_LOGIC := '1' ;
     SIGNAL init_line : STD_LOGIC := '0' ;
     
-    SIGNAL clock_10MHz_line : STD_LOGIC ;
+    SIGNAL clock_70kHz_line : STD_LOGIC ;
+    SIGNAL clock_1p3615MHz_line : STD_LOGIC ;
     
     SIGNAL manchester_begin_transmission : STD_LOGIC := '0' ;
     
+    SIGNAL man1_temp_output : STD_LOGIC ;
+    SIGNAL man2_temp_output : STD_LOGIC ;
+
     SIGNAL manchester1_ready_for_data_on_din : STD_LOGIC ;
     SIGNAL manchester2_ready_for_data_on_din : STD_LOGIC ;
     
@@ -99,65 +103,40 @@ ARCHITECTURE monarch OF main IS
     
 BEGIN
 
+    -- To drive 5V logic with 3.3V FPGA output, additional transistor was needed.
+    -- Next two lines necessary if using NPN. Not needed for PNP.
+    man1_out <= not man1_temp_output ;
+    man2_out <= not man2_temp_output ;
+
     -- MSB first in data
     data_bus_line_for_man2_transmission <= main_data_bus_line_for_all_out(15 DOWNTO 0) ; 
     data_bus_line_for_man1_transmission <= main_data_bus_line_for_all_out(31 DOWNTO 16) ;
-    
-    --srom_clock <= clock WHEN srom_clock_selector='1' ELSE '1' ;
-    
-    test_man1 <= manchester1_ready_for_data_on_din ;
-    test_man2 <= manchester2_ready_for_data_on_din ;
-    test_querry <= srom_querry ;
-    test_manbeg <= manchester_begin_transmission ;
- 
- 
---NEXTBYTE: PROCESS(clock, txaction)
---    VARIABLE jump : UNSIGNED(1 DOWNTO 0) := "00" ;
---    BEGIN
---        IF (clock'EVENT AND clock='1') THEN
---            CASE jump IS
---                WHEN "00" =>  --turn srom_on
---                    srom_querry <= '0' ;
---                    jump <= "10" ;
---                WHEN "11" =>
---                    srom_querry <= '1'
---                    jump <= "11" ;
---                WHEN "10" =>
---                    IF (srom_querry='0') THEN
---                        jump <= "00" ;
---                    ELSE
---                        jump <= "11" ;
---                    END IF;
---            END CASE;
---        END IF;                 
---    END PROCESS;
-    
+        
+--     test_man1 <= manchester1_ready_for_data_on_din ;
+--     test_man2 <= manchester2_ready_for_data_on_din ;
+--     test_querry <= srom_querry ;
+--     test_manbeg <= manchester_begin_transmission ;    
     
 MAIN: PROCESS(clock, reset)
 --        VARIABLE srom_count : INTEGER RANGE 0 TO 1 := 0 ;
     BEGIN     
         main_data_bus_line_for_all_out <= temp_trans_out ;
-        test_tout <= temp_trans_out ;
+--        test_tout <= temp_trans_out ;
         
         IF (init_line='0' OR reset='1') THEN  --Self reset on startup   
             srom_reset <= '1' ;
             srom_querry <= '0' ;
             manchester_begin_transmission <= '0' ;
             global_reset_line <= '1' ;
+            led_idle <= '0' ;
             init_line <= '1' ;
+            txaction <= "000" ;
             
-        ELSIF (clock='1') THEN
-        
---            IF (srom_count < 1) THEN
---                srom_count := srom_count + 1 ;
---            ELSE
---                srom_count := 0 ;
---                srom_querry <= '0' ;
---            END IF;
+        ELSIF (RISING_EDGE(clock)) THEN
             
             CASE txaction IS    
                 WHEN "000" =>    --Ready to begin transmission
-                    IF (start_tx = '1') THEN
+                    IF (start_tx = '1' OR tx_mode = '1') THEN
                         srom_reset <= '0' ;
                         srom_querry <= '1' ;
                         global_reset_line <= '0' ;
@@ -187,19 +166,36 @@ MAIN: PROCESS(clock, reset)
                     END IF;
                                                                                              
                     IF (main_data_bus_line_for_all_out = x"FFFFFFFF") THEN
-                        txaction <= "111" ;
+                        txaction <= "101" ;
                     END IF;                                  
                     
                 WHEN "100" =>   --Load data bus2
                     srom_querry <= '1' ;
                     txaction <= "010" ;
                 
+                WHEN "101" =>   --Repeat transmission or stay idle
+                    IF (tx_mode = '1') THEN  --automatic mode
+                        srom_reset <= '1' ;
+                        srom_querry <= '0' ;
+                        global_reset_line <= '1' ;
+                        manchester_begin_transmission <= '0' ;
+                        led_idle <= '0' ;
+                        txaction <= "110" ;         
+                    ELSE
+                        txaction <= "111" ;
+                    END IF;
+                    
+                WHEN "110" =>   --empty state to allow a clock cycle
+                    txaction <= "000" ;
+                                 
                 WHEN OTHERS =>
                     manchester_begin_transmission <= '0' ;                           
                     led_idle <= '1' ; 
                                      
             END CASE;
+            
         END IF;
+        
     END PROCESS;          
 
 
@@ -210,8 +206,8 @@ MAIN: PROCESS(clock, reset)
 CLOCKDIV: clock_divider
 PORT MAP (
     clock_100MHz => clock,
-    clock_50MHz => OPEN,
-    clock_10MHz => clock_10MHz_line,
+    clock_10MHz => clock_1p3615MHz_line,
+    clock_70kHz => OPEN, 
     clock_1Hz => OPEN
 );
 
@@ -228,22 +224,22 @@ PORT MAP (
 
 MANENCODE1: encode
 PORT MAP (
-    clk16x => clock,
+    clk16x => clock_1p3615MHz_line,
     srst => global_reset_line,
     tx_data => data_bus_line_for_man1_transmission,
     tx_stb => manchester_begin_transmission,
-    txd => man1_out,
+    txd => man1_temp_output,
     or_err => manchester1_overrun_error,
     tx_idle => manchester1_ready_for_data_on_din
 );
 
 MANENCODE2: encode
 PORT MAP (
-    clk16x => clock,
+    clk16x => clock_1p3615MHz_line,
     srst => global_reset_line,
     tx_data => data_bus_line_for_man2_transmission,
     tx_stb => manchester_begin_transmission,
-    txd => man2_out,
+    txd => man2_temp_output,
     or_err => manchester2_overrun_error,
     tx_idle => manchester2_ready_for_data_on_din
 );
