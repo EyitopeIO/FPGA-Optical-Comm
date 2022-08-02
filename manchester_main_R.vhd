@@ -99,7 +99,6 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbol_error_overload : STD_LOGIC := '0' ;
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
     
-    SIGNAL display_bus_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
 BEGIN
@@ -111,19 +110,18 @@ BEGIN
     overload <= '1' WHEN symbol_error_overload = '1' ELSE '0' ;
     led_idle <= idle_line ;
     
-    display_bus <= STD_LOGIC_VECTOR(display_bus_count) ;
+    display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
     
   
 SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
     BEGIN
         IF (reset='1') THEN
-            display_bus_count <= x"0000" ;
             symbol_count_reset <= '0' ;
         ELSIF (RISING_EDGE(clock_1Hz_line)) THEN
-            display_bus_count <= display_bus_count + 1 ;  
             symbol_count_reset <= '1' ;     
         END IF;
     END PROCESS;    
+
 
 MAIN: PROCESS(clock, reset)
     BEGIN             
@@ -140,13 +138,65 @@ MAIN: PROCESS(clock, reset)
 
         ELSIF RISING_EDGE(clock) THEN
         
-            global_reset_line <= '0' ;
-
             IF (symbol_error_count > 65535) THEN
                 symbol_error_overload <= '1' ;
             ELSE
                 symbol_error_overload <= '0' ;
             END IF;
+            
+            CASE rxaction IS
+                WHEN "000" =>       --Initialised system
+                    srom_reset <= '0' ;
+                    srom_querry <= '1' ;
+                    global_reset_line <= '0' ;
+                    symbol_error_count <= x"0000" ;
+                    symbol_error_overload <= '0' ;
+                    symbols_equal <= '0' ;
+                    idle_line <= '0' ;
+                    rxaction <= "001" ;
+                    
+                WHEN "001" =>       --Waiting for start bit or idle line to go low               
+                    srom_querry <= '0' ;
+                    srom_reset <= '0' ;                    
+                    IF (manchester1_idle='0'AND manchester2_idle='0') THEN
+                        idle_line <= '0' ;
+                        rxaction <= "010" ;
+                    ELSE
+                        idle_line <= '1' ;
+                    END IF;
+                    
+                WHEN "010" =>       --Receiving the data
+                    IF (manchester1_idle='1'AND manchester2_idle='1') THEN      --Data completely received
+                        IF (main_data_bus_line_for_all_in /= temp_trans_in) THEN
+                            symbol_error_count <= symbol_error_count + 1 ;                                                       
+                        END IF;
+                        rxaction <= "011" ;
+                    END IF;
+                    
+                WHEN "011" =>       --Load the comparison line and do other stuff
+                    srom_querry <= '1' ;
+                    IF (symbol_count_reset='1') THEN
+                        symbol_error_count <= x"0000" ;
+                    END IF;
+                    
+                    IF (main_data_bus_line_for_all_in = x"FFFFFFFF") THEN   --If at end of data    
+                        IF (rx_mode = '1') THEN     --If automatic mode
+                            rxaction <= "001" ;
+                            srom_reset <= '1' ;
+                        ELSE
+                            rxaction <= "100" ;
+                        END IF;
+                    ELSE
+                        rxaction <= "010" ;
+                    END IF;
+                    
+                WHEN "100" =>
+                    idle_line <= '1' ;
+                    
+                WHEN OTHERS =>      
+                    rxaction <= "111" ;     --Abitrary number. Will never happen
+                                 
+            END CASE;
     
         END IF;
     END PROCESS;          
