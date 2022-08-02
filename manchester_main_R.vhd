@@ -18,7 +18,9 @@ ENTITY mainR IS
         reset :      IN STD_LOGIC;
         rx_mode : IN STD_LOGIC ;
         led_idle : OUT STD_LOGIC ;
-        overload : OUT STD_LOGIC  --High when symbol errors to much
+        overload : OUT STD_LOGIC;   --High when symbol errors to much
+        anode : OUT STD_LOGIC_VECTOR(3 DOWNTO 0) ;
+        cathode : OUT STD_LOGIC_VECTOR(6 DOWNTO 0)
     );
     
 END mainR;
@@ -55,6 +57,16 @@ ARCHITECTURE monarch OF mainR IS
     );
     END COMPONENT ;
     
+    COMPONENT lcdbox IS
+    PORT (
+        number : IN STD_LOGIC_VECTOR(15 DOWNTO 0) ;
+        clock_100Mhz : IN STD_LOGIC ;
+        rst : IN STD_LOGIC ;         
+        Anode_Activate : OUT STD_LOGIC_VECTOR (3 DOWNTO 0) ;  -- 4 Anode signals
+        LED_out : OUT STD_LOGIC_VECTOR (6 DOWNTO 0)  -- Cathode patterns of 7-segment display
+    );
+    END COMPONENT;
+    
     SIGNAL global_reset_line : STD_LOGIC := '0' ;
     SIGNAL idle_line : STD_LOGIC := '1' ;
     SIGNAL init_line : STD_LOGIC := '0' ;
@@ -87,7 +99,7 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbol_error_overload : STD_LOGIC := '0' ;
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
     
-    SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) ;
+    SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
 BEGIN
     
@@ -173,7 +185,7 @@ MAIN: PROCESS(clock, reset)
                     END IF;
                        
                 WHEN OTHERS =>
-                    led_idle <= '1' ; 
+                    idle_line <= '1' ; 
                                      
             END CASE;
         END IF;
@@ -220,6 +232,15 @@ PORT MAP (
     rxd => man2_in,
     fm_err => manchester2_frame_error,
     rx_idle => manchester2_idle
+);
+
+DISPLAY: lcdbox
+PORT MAP (
+    number => display_bus ,
+    clock_100Mhz => clock,
+    rst => global_reset_line,
+    Anode_Activate => anode,
+    LED_out => cathode
 );
 
 END monarch;
