@@ -99,6 +99,7 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbol_error_overload : STD_LOGIC := '0' ;
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
     
+    SIGNAL display_bus_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
 BEGIN
@@ -109,14 +110,17 @@ BEGIN
     
     overload <= '1' WHEN symbol_error_overload = '1' ELSE '0' ;
     led_idle <= idle_line ;
+    
+    display_bus <= STD_LOGIC_VECTOR(display_bus_count) ;
+    
   
 SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
     BEGIN
         IF (reset='1') THEN
-            display_bus <= x"0000" ;
+            display_bus_count <= x"0000" ;
             symbol_count_reset <= '0' ;
         ELSIF (RISING_EDGE(clock_1Hz_line)) THEN
-            display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;  
+            display_bus_count <= display_bus_count + 1 ;  
             symbol_count_reset <= '1' ;     
         END IF;
     END PROCESS;    
@@ -135,6 +139,8 @@ MAIN: PROCESS(clock, reset)
             rxaction <= "000" ;
 
         ELSIF RISING_EDGE(clock) THEN
+        
+            global_reset_line <= '0' ;
 
             IF (symbol_error_count > 65535) THEN
                 symbol_error_overload <= '1' ;
@@ -142,52 +148,6 @@ MAIN: PROCESS(clock, reset)
                 symbol_error_overload <= '0' ;
             END IF;
     
-            CASE rxaction IS             
-                WHEN "000" =>    --Wait for first data in memory
-                    srom_reset <= '0' ;
-                    global_reset_line <= '0' ; 
-                    
-                    IF (manchester1_idle='0' AND manchester2_idle='0') THEN  --i.e. It just began receiving
-                        rxaction <= "001" ;
-                        srom_querry <= '1' ;
-                    END IF;
-                                     
-                WHEN "001" =>  --Wait for idle line to go high, or low to high
-                    srom_querry <= '0' ;
-                
-                    IF (manchester1_idle='1' AND manchester2_idle='1') THEN  -- symbol received
-                        rxaction <= "010" ;
-
-                        IF (main_data_bus_line_for_all_in /= temp_trans_in) THEN
-                            symbol_error_count <= symbol_error_count + 1 ;
-
-                        ELSIF (main_data_bus_line_for_all_in = x"FFFFFFFF") THEN
-                            IF (rx_mode = '1') THEN
-                                srom_reset <= '1' ;
-                                rxaction <= "000" ;
-                            ELSE
-                                rxaction <= "111" ;
-                            END IF;
-                        END IF;
-
-                    END IF;
-
-                WHEN "010" =>  --Wait for idle line to go low   
-                    IF (manchester1_idle='0' AND manchester2_idle='0') THEN
-                        rxaction <= "011" ;
-                    END IF;         
-                                
-                WHEN "011" =>  --Load next data in comparison line
-                    srom_querry <= '1' ;
-                    rxaction <= "001" ;
-                    IF (symbol_count_reset = '1') THEN
-                        symbol_error_count <= x"0000" ;
-                    END IF;
-                       
-                WHEN OTHERS =>
-                    idle_line <= '1' ; 
-                                     
-            END CASE;
         END IF;
     END PROCESS;          
 
