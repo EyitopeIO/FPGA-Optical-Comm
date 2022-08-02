@@ -93,7 +93,9 @@ BEGIN
             Anode_Activate <= "1110"; 
             -- activate LED4 and Deactivate LED2, LED3, LED1
             LED_BCD <= displayed_number(3 downto 0);
-            -- the fourth hex digit of the 16-bit number    
+            -- the fourth hex digit of the 16-bit number  
+        when others =>
+            
         end case;
     end PROCESS;
     
@@ -135,6 +137,7 @@ BEGIN
             WHEN "1101" => LED_out <= "1000010"; -- d
             WHEN "1110" => LED_out <= "0110000"; -- E
             WHEN "1111" => LED_out <= "0111000"; -- F
+            WHEN OTHERS =>
         END CASE;
     END PROCESS;
 
