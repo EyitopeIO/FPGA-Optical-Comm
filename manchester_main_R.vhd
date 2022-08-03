@@ -152,7 +152,6 @@ MAIN: PROCESS(clock, reset)
                     symbols_equal <= '0' ;
                     symbol_count <= 0 ;
                     idle_line <= '0' ;
-                    overload <= '0' ;
                     rxaction <= "001" ;
                     
                 WHEN "001" =>       --Waiting for transmission to begin              
