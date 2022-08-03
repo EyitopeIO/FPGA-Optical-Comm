@@ -100,7 +100,7 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbols_equal : STD_LOGIC := '0' ;
     SIGNAL symbol_error_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;  --Also used as displayed number    
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
-    SIGNAL symbol_count : INTEGER RANGE 0 TO 46 := 0 ;      --Used in manual mode only
+    SIGNAL symbol_count : INTEGER RANGE 0 TO 65536 := 0 ;      --Used in manual mode only
     
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
@@ -110,11 +110,12 @@ BEGIN
     main_data_bus_line_for_all_in(15 DOWNTO 0) <= data_bus_line_for_man2_reception ; 
     main_data_bus_line_for_all_in(31 DOWNTO 16) <= data_bus_line_for_man1_reception ;
     
-    overload <= '1' WHEN symbol_error_count > 255 ELSE '0' ;
+    overload <= '1' WHEN symbol_error_count > 8192 ELSE '0' ;       --8192 is half of maximum count; just to see what's going on
     led_idle <= idle_line ;
     
-    display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
-    
+    display_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(symbol_count, 16)) ;
+   --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
+
   
 SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
     BEGIN
@@ -154,43 +155,50 @@ MAIN: PROCESS(clock, reset)
                     idle_line <= '0' ;
                     rxaction <= "001" ;
                     
-                WHEN "001" =>       --Waiting for transmission to begin              
+                WHEN "001" =>       --Waiting for reception to begin              
                     srom_querry <= '0' ;
                     srom_reset <= '0' ;                    
-                    IF (manchester1_idle='0'AND manchester2_idle='0' AND  manchester2_received_stopbit='0' AND manchester2_received_stopbit='0') THEN
+                    IF (manchester1_idle='0' AND manchester2_idle='0') THEN
                         idle_line <= '0' ;
                         rxaction <= "010" ;
                     END IF;
                     
                 WHEN "010" =>       --Receiving the data
 
-                    IF (manchester1_frame_error='1' OR manchester2_frame_error='1') THEN
-                        symbol_error_count <= x"EEEE" ;
-                        rxaction <= "111" ;     --Just stop
+--                    IF (manchester1_frame_error='1' OR manchester2_frame_error='1') THEN
+--                        symbol_error_count <= x"EEEE" ;
+--                        --rxaction <= "111" ;     --Just stop
+--                    END IF;
 
-                    ELSIF (manchester1_idle='0'AND manchester2_idle='0' AND manchester1_received_stopbit='1' AND manchester2_received_stopbit='1' ) THEN    --Data completely received
+                    IF (manchester1_idle='1'AND manchester2_idle='1') THEN    --Data completely received
+                                  
                        
                         IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count = 46 ) THEN      --We successfully received all
                             symbol_error_count <= x"D09E" ;
+                            rxaction <= "011" ;
 
-                        ELSIF (main_data_bus_line_for_all_in /= temp_trans_in AND symbol_count < 46 ) THEN      --An error in received data
+                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < 46 ) THEN      --An error in received data
                             symbol_error_count <= symbol_error_count + 1 ;
+                            rxaction <= "011" ;
 
-                        ELSIF (main_data_bus_line_for_all_in = x"FFFFFFFF" AND symbol_count = 46 ) THEN     --Received all for sure
+                        ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > 46 ) THEN     --Received all for sure
                             symbol_error_count <= x"FFFF" ;
+                            rxaction <= "100" ;
+                            
+                        ELSE
+                            rxaction <= "010" ;
 
                         END IF;
                         
                         symbol_count <= symbol_count + 1 ;
-                        rxaction <= "011" ;
 
                     END IF ;    
                     
                 WHEN "011" =>       --Received state. Load the comparison line and do other stuff
                     srom_querry <= '1' ;
-                    IF (symbol_count_reset='1') THEN
-                        symbol_error_count <= x"0000" ;
-                    END IF;
+--                    IF (symbol_count_reset='1') THEN
+--                        symbol_error_count <= x"0000" ;
+--                    END IF;
 
                     IF (rx_mode = '1') THEN
                         rxaction <= "001" ;
