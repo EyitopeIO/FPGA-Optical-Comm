@@ -158,8 +158,6 @@ MAIN: PROCESS(clock, reset)
                     IF (manchester1_idle='0'AND manchester2_idle='0' AND  manchester2_received_stopbit='0' AND manchester2_received_stopbit='0') THEN
                         idle_line <= '0' ;
                         rxaction <= "010" ;
-                    ELSE
-                        idle_line <= '1' ;
                     END IF;
                     
                 WHEN "010" =>       --Receiving the data
@@ -199,9 +197,13 @@ MAIN: PROCESS(clock, reset)
                 
                 WHEN "100" =>
                     idle_line <= '1' ;
+                    overload <= '0' ;
                     
                 WHEN OTHERS =>      
                     overload <= '1' ;     --Abitrary number. Will never happen
+                    global_reset_line <= '1' ;
+                    overload <= '1' ;
+
                     
             END CASE;
     
