@@ -75,6 +75,7 @@ ARCHITECTURE monarch OF mainR IS
 
     SIGNAL clock_1Hz_line : STD_LOGIC ;
     SIGNAL clock_70kHz_line : STD_LOGIC ;
+    SIGNAL clock_1p3615MHz : STD_LOGIC ;
         
     SIGNAL manchester1_received_stopbit : STD_LOGIC ;
     SIGNAL manchester2_received_stopbit : STD_LOGIC ;
@@ -109,7 +110,7 @@ BEGIN
     main_data_bus_line_for_all_in(15 DOWNTO 0) <= data_bus_line_for_man2_reception ; 
     main_data_bus_line_for_all_in(31 DOWNTO 16) <= data_bus_line_for_man1_reception ;
     
-    overload <= '1' WHEN symbol_error_count > 65535 ELSE '0' ;
+    overload <= '1' WHEN symbol_error_count > 255 ELSE '0' ;
     led_idle <= idle_line ;
     
     display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
@@ -135,7 +136,7 @@ MAIN: PROCESS(clock, reset)
             global_reset_line <= '1' ;
             symbol_error_count <= x"0000" ;
             symbols_equal <= '0' ;
-            symbol_count := 0 ;
+            symbol_count <= 0 ;
             init_line <= '1' ;
             idle_line <= '0' ;
             rxaction <= "000" ;
@@ -149,7 +150,7 @@ MAIN: PROCESS(clock, reset)
                     global_reset_line <= '0' ;
                     symbol_error_count <= x"0000" ;
                     symbols_equal <= '0' ;
-                    symbol_count := 0 ;
+                    symbol_count <= 0 ;
                     idle_line <= '0' ;
                     overload <= '0' ;
                     rxaction <= "001" ;
@@ -181,7 +182,7 @@ MAIN: PROCESS(clock, reset)
 
                         END IF;
                         
-                        symbol_count := symbol_count + 1 ;
+                        symbol_count <= symbol_count + 1 ;
                         rxaction <= "011" ;
 
                     END IF ;    
@@ -198,16 +199,9 @@ MAIN: PROCESS(clock, reset)
                         rxaction <= "100" ;
                     END IF;
                 
-                WHEN "100" =>
+                WHEN OTHERS =>
                     idle_line <= '1' ;
-                    overload <= '0' ;
-                    
-                WHEN OTHERS =>      
-                    overload <= '1' ;     --Abitrary number. Will never happen
-                    global_reset_line <= '1' ;
-                    overload <= '1' ;
-
-                    
+                               
             END CASE;
     
         END IF;
@@ -222,7 +216,7 @@ CLOCKDIV: clock_divider
 PORT MAP (
     clock_100MHz => clock,
     clock_70kHz => OPEN,
-    clock_10MHz => OPEN,
+    clock_10MHz => clock_1p3615MHz,
     clock_1Hz => clock_1Hz_line
 );
 
@@ -236,7 +230,7 @@ PORT MAP (
 
 MANDECODE1: decode
 PORT MAP (
-    clk16x => clock,
+    clk16x => clock_1p3615MHz,
     srst => global_reset_line,
     rx_data => data_bus_line_for_man1_reception,
     rx_stb => manchester1_received_stopbit,
@@ -247,7 +241,7 @@ PORT MAP (
 
 MANDECODE2: decode
 PORT MAP (
-    clk16x => clock,
+    clk16x => clock_1p3615MHz,
     srst => global_reset_line,
     rx_data => data_bus_line_for_man2_reception,
     rx_stb => manchester2_received_stopbit,
