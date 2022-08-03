@@ -135,6 +135,7 @@ MAIN: PROCESS(clock, reset)
             global_reset_line <= '1' ;
             symbol_error_count <= x"0000" ;
             symbols_equal <= '0' ;
+            symbol_count := 0 ;
             init_line <= '1' ;
             idle_line <= '0' ;
             rxaction <= "000" ;
@@ -148,6 +149,7 @@ MAIN: PROCESS(clock, reset)
                     global_reset_line <= '0' ;
                     symbol_error_count <= x"0000" ;
                     symbols_equal <= '0' ;
+                    symbol_count := 0 ;
                     idle_line <= '0' ;
                     overload <= '0' ;
                     rxaction <= "001" ;
@@ -178,7 +180,8 @@ MAIN: PROCESS(clock, reset)
                             symbol_error_count <= x"FFFF" ;
 
                         END IF;
-
+                        
+                        symbol_count := symbol_count + 1 ;
                         rxaction <= "011" ;
 
                     END IF ;    
