@@ -17,8 +17,10 @@ ENTITY mainR IS
         man2_in:   IN STD_LOGIC;        
         reset :      IN STD_LOGIC;
         rx_mode : IN STD_LOGIC ;
+        
         led_idle : OUT STD_LOGIC ;
-        overload : OUT STD_LOGIC;   --High when symbol errors to much
+        overload : OUT STD_LOGIC ;   --High when symbol errors to much
+
         anode : OUT STD_LOGIC_VECTOR(3 DOWNTO 0) ;
         cathode : OUT STD_LOGIC_VECTOR(6 DOWNTO 0)
     );
@@ -74,8 +76,8 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL clock_1Hz_line : STD_LOGIC ;
     SIGNAL clock_70kHz_line : STD_LOGIC ;
         
-    SIGNAL manchester1_stopped_receiving : STD_LOGIC ;
-    SIGNAL manchester2_stopped_receiving : STD_LOGIC ;
+    SIGNAL manchester1_received_stopbit : STD_LOGIC ;
+    SIGNAL manchester2_received_stopbit : STD_LOGIC ;
 
     SIGNAL manchester1_idle : STD_LOGIC ;
     SIGNAL manchester2_idle : STD_LOGIC ;
@@ -95,9 +97,9 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL rxaction : UNSIGNED(2 DOWNTO 0) := "000" ;
 
     SIGNAL symbols_equal : STD_LOGIC := '0' ;
-    SIGNAL symbol_error_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;  --Unlikely to have errors greater than 256, yeah?
-    SIGNAL symbol_error_overload : STD_LOGIC := '0' ;
+    SIGNAL symbol_error_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;  --Also used as displayed number    
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
+    SIGNAL symbol_count : INTEGER RANGE 0 TO 46 := 0 ;      --Used in manual mode only
     
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
@@ -107,7 +109,7 @@ BEGIN
     main_data_bus_line_for_all_in(15 DOWNTO 0) <= data_bus_line_for_man2_reception ; 
     main_data_bus_line_for_all_in(31 DOWNTO 16) <= data_bus_line_for_man1_reception ;
     
-    overload <= '1' WHEN symbol_error_overload = '1' ELSE '0' ;
+    overload <= '1' WHEN symbol_error_count > 65535 ELSE '0' ;
     led_idle <= idle_line ;
     
     display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
@@ -117,8 +119,10 @@ SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
     BEGIN
         IF (reset='1') THEN
             symbol_count_reset <= '0' ;
-        ELSIF (RISING_EDGE(clock_1Hz_line)) THEN
-            symbol_count_reset <= '1' ;     
+        ELSIF (clock_1Hz_line='1') THEN
+            symbol_count_reset <= '1' ;  
+        ELSE
+            symbol_count_reset <= '0' ;
         END IF;
     END PROCESS;    
 
@@ -130,19 +134,12 @@ MAIN: PROCESS(clock, reset)
             srom_querry <= '0' ;
             global_reset_line <= '1' ;
             symbol_error_count <= x"0000" ;
-            symbol_error_overload <= '0' ;
             symbols_equal <= '0' ;
             init_line <= '1' ;
             idle_line <= '0' ;
             rxaction <= "000" ;
 
         ELSIF RISING_EDGE(clock) THEN
-        
-            IF (symbol_error_count > 65535) THEN
-                symbol_error_overload <= '1' ;
-            ELSE
-                symbol_error_overload <= '0' ;
-            END IF;
             
             CASE rxaction IS
                 WHEN "000" =>       --Initialised system
@@ -150,15 +147,15 @@ MAIN: PROCESS(clock, reset)
                     srom_querry <= '1' ;
                     global_reset_line <= '0' ;
                     symbol_error_count <= x"0000" ;
-                    symbol_error_overload <= '0' ;
                     symbols_equal <= '0' ;
                     idle_line <= '0' ;
+                    overload <= '0' ;
                     rxaction <= "001" ;
                     
-                WHEN "001" =>       --Waiting for start bit or idle line to go low               
+                WHEN "001" =>       --Waiting for transmission to begin              
                     srom_querry <= '0' ;
                     srom_reset <= '0' ;                    
-                    IF (manchester1_idle='0'AND manchester2_idle='0') THEN
+                    IF (manchester1_idle='0'AND manchester2_idle='0' AND  manchester2_received_stopbit='0' AND manchester2_received_stopbit='0') THEN
                         idle_line <= '0' ;
                         rxaction <= "010" ;
                     ELSE
@@ -166,36 +163,46 @@ MAIN: PROCESS(clock, reset)
                     END IF;
                     
                 WHEN "010" =>       --Receiving the data
-                    IF (manchester1_idle='1'AND manchester2_idle='1') THEN      --Data completely received
-                        IF (main_data_bus_line_for_all_in /= temp_trans_in) THEN
-                            symbol_error_count <= symbol_error_count + 1 ;                                                       
+
+                    IF (manchester1_frame_error='1' OR manchester2_frame_error='1') THEN
+                        symbol_error_count <= x"EEEE" ;
+                        rxaction <= "111" ;     --Just stop
+
+                    ELSIF (manchester1_idle='0'AND manchester2_idle='0' AND manchester1_received_stopbit='1' AND manchester2_received_stopbit='1' ) THEN    --Data completely received
+                       
+                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count = 46 ) THEN      --We successfully received all
+                            symbol_error_count <= x"D09E" ;
+
+                        ELSIF (main_data_bus_line_for_all_in /= temp_trans_in AND symbol_count < 46 ) THEN      --An error in received data
+                            symbol_error_count <= symbol_error_count + 1 ;
+
+                        ELSIF (main_data_bus_line_for_all_in = x"FFFFFFFF" AND symbol_count = 46 ) THEN     --Received all for sure
+                            symbol_error_count <= x"FFFF" ;
+
                         END IF;
+
                         rxaction <= "011" ;
-                    END IF;
+
+                    END IF ;    
                     
-                WHEN "011" =>       --Load the comparison line and do other stuff
+                WHEN "011" =>       --Received state. Load the comparison line and do other stuff
                     srom_querry <= '1' ;
                     IF (symbol_count_reset='1') THEN
                         symbol_error_count <= x"0000" ;
                     END IF;
-                    
-                    IF (main_data_bus_line_for_all_in = x"FFFFFFFF") THEN   --If at end of data    
-                        IF (rx_mode = '1') THEN     --If automatic mode
-                            rxaction <= "001" ;
-                            srom_reset <= '1' ;
-                        ELSE
-                            rxaction <= "100" ;
-                        END IF;
+
+                    IF (rx_mode = '1') THEN
+                        rxaction <= "001" ;
                     ELSE
-                        rxaction <= "010" ;
+                        rxaction <= "100" ;
                     END IF;
-                    
+                
                 WHEN "100" =>
                     idle_line <= '1' ;
                     
                 WHEN OTHERS =>      
-                    rxaction <= "111" ;     --Abitrary number. Will never happen
-                                 
+                    overload <= '1' ;     --Abitrary number. Will never happen
+                    
             END CASE;
     
         END IF;
@@ -227,7 +234,7 @@ PORT MAP (
     clk16x => clock,
     srst => global_reset_line,
     rx_data => data_bus_line_for_man1_reception,
-    rx_stb => manchester1_stopped_receiving,
+    rx_stb => manchester1_received_stopbit,
     rxd => man1_in,
     fm_err => manchester1_frame_error,
     rx_idle => manchester1_idle
@@ -238,7 +245,7 @@ PORT MAP (
     clk16x => clock,
     srst => global_reset_line,
     rx_data => data_bus_line_for_man2_reception,
-    rx_stb => manchester2_stopped_receiving,
+    rx_stb => manchester2_received_stopbit,
     rxd => man2_in,
     fm_err => manchester2_frame_error,
     rx_idle => manchester2_idle
