@@ -79,6 +79,10 @@ ARCHITECTURE monarch OF mainR IS
         
     SIGNAL manchester1_received_stopbit : STD_LOGIC ;
     SIGNAL manchester2_received_stopbit : STD_LOGIC ;
+    
+    -- To account for the NPN transistor to shift the 5V logic from light sensor to 3.3V
+    SIGNAL man1_temp : STD_LOGIC ;
+    SIGNAL man2_temp : STD_LOGIC ;
 
     SIGNAL manchester1_idle : STD_LOGIC ;
     SIGNAL manchester2_idle : STD_LOGIC ;
@@ -115,6 +119,9 @@ BEGIN
     
     display_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(symbol_count, 16)) ;
    --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
+   
+   man1_temp <= not man1_in ;
+   man2_temp <= not man2_in ;
 
   
 SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
@@ -241,7 +248,7 @@ PORT MAP (
     srst => global_reset_line,
     rx_data => data_bus_line_for_man1_reception,
     rx_stb => manchester1_received_stopbit,
-    rxd => man1_in,
+    rxd => man1_temp,
     fm_err => manchester1_frame_error,
     rx_idle => manchester1_idle
 );
@@ -252,7 +259,7 @@ PORT MAP (
     srst => global_reset_line,
     rx_data => data_bus_line_for_man2_reception,
     rx_stb => manchester2_received_stopbit,
-    rxd => man2_in,
+    rxd => man2_temp,
     fm_err => manchester2_frame_error,
     rx_idle => manchester2_idle
 );
