@@ -20,6 +20,8 @@ ENTITY main IS
         start_tx : IN STD_LOGIC; --send 46 bytes once
         tx_mode : IN STD_LOGIC;
         reset :      IN STD_LOGIC; 
+
+        overload : OUT STD_LOGIC ;
         
 --         test_tout : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; 
 --         test_man1 : OUT STD_LOGIC;
@@ -111,6 +113,8 @@ BEGIN
     -- MSB first in data
     data_bus_line_for_man2_transmission <= main_data_bus_line_for_all_out(15 DOWNTO 0) ; 
     data_bus_line_for_man1_transmission <= main_data_bus_line_for_all_out(31 DOWNTO 16) ;
+
+    overload <= '1' WHEN manchester1_overrun_error='1' OR manchester2_overrun_error='1' ELSE '0' ;
         
 --     test_man1 <= manchester1_ready_for_data_on_din ;
 --     test_man2 <= manchester2_ready_for_data_on_din ;
