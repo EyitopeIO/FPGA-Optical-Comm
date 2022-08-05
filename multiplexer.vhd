@@ -3,7 +3,7 @@ USE IEEE.STD_LOGIC_1164.ALL;
 
 ENTITY mux is
     GENERIC (
-        data_bus_width   :   NATURAL;
+        data_bus_width   :   NATURAL := 32
     );
     PORT (
         sel :   IN STD_LOGIC;
@@ -15,5 +15,5 @@ END mux;
 
 ARCHITECTURE muxarch OF mux IS
 BEGIN
-    x <= a WHEN (sel = '1') ELSE B;
+    x <= a WHEN (sel = '1') ELSE b ;
 END muxarch;
