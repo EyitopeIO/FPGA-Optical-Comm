@@ -12,8 +12,8 @@ ENTITY main IS
     );
     
     PORT (
-        man1_out : OUT STD_LOGIC ;
-        man2_out : OUT STD_LOGIC ;
+        manchester1 : OUT STD_LOGIC ;
+        manchester2 : OUT STD_LOGIC ;
 
         uart_tx : OUT STD_LOGIC ;
         uart_rx : IN STD_LOGIC ;
@@ -21,7 +21,8 @@ ENTITY main IS
         clock : IN STD_LOGIC ;
         reset : IN STD_LOGIC ; 
 
-        led_idle : OUT STD_LOGIC ;
+        standby : OUT STD_LOGIC ;
+        uart_activity : OUT STD_LOGIC ;
         overrun : OUT STD_LOGIC ;
         
         Anode_Activate : OUT STD_LOGIC_VECTOR (3 DOWNTO 0) ;
@@ -110,6 +111,7 @@ ARCHITECTURE jumpstart OF main IS
 
     SIGNAL reset_line : STD_LOGIC := '0' ;
     SIGNAL ground_line : STD_LOGIC := '0' ;
+    signal init_line : STD_LOGIC := '0' ;
     
     SIGNAL fpga_clock : STD_LOGIC ;
     SIGNAL manchester_clock : STD_LOGIC ;
@@ -131,25 +133,64 @@ ARCHITECTURE jumpstart OF main IS
 
     SIGNAL loader_is_ready : STD_LOGIC ; 
     SIGNAL loader_activate : STD_LOGIC ;
-
+    
+    SIGNAL txstate : UNSIGNED(2 DOWNTO 0) := "000" ;
+    
+        
 BEGIN
 
     -- To drive 5V logic with 3.3V FPGA output using logic shifter with NPN transistor
-    man1_out <= not man1_temp_output ;
-    man2_out <= not man2_temp_output ;
+    manchester1 <= not man1_temp_output ;
+    manchester2 <= not man2_temp_output ;
 
     fpga_clock <= clock ;
-    reset_line <= reset ; 
 
-    
-MAIN: PROCESS(clock, reset)
+    overrun <= '1' WHEN uart_rx_error='1' OR man_overload='1' ELSE standby_clock ;
+    uart_activity <= '1' WHEN uart_rx_busy='1' ELSE '0' ;
+    --standby <= '1' WHEN man_idle='1' ELSE '0' ;  
+        
+MAIN: PROCESS(fpga_clock, reset)
     BEGIN
+        IF (init_line='0') THEN         --One-time setup here
+            reset_line <= '0' ;
+            init_line <= '1' ;
+        
+        ELSIF (reset='1') THEN 
+            reset_line <= '1' ;
+            reset_line <= '1' ;
+            
+        ELSIF (RISING_EDGE(fpga_clock)) THEN
+           reset_line <= '0' ;
+           
+           CASE txstate IS
+--------------------------------------------------------------           
+            WHEN "000" =>       --Waiting for receive activity
+                IF (uart_rx_busy='1') THEN
+                    txstate <= "001" ;
+                END IF;
+ -------------------------------------------------------------                                 
+            WHEN "001" =>       --Waiting for UART to receive 8 bits
+                IF (uart_rx_busy='0') THEN      --8 bits ready on bus
+                    loader_activate <= '1' ;
+                    IF (loader_is_ready='1') THEN
+                        IF (man_idle='1') THEN
+                            begin_transmission <= '1' ;
+                        END IF;
+                    END IF;
+                    txstate <= "010" ;
+                END IF;
+ ------------------------------------------------------------                              
+            WHEN "010" =>       --Return to waiting state
+                loader_activate <= '0' ;
+                begin_transmission <= '0' ;
+                txstate <= "000" ;
+ -----------------------------------------------------------               
+            WHEN "011" =>       --Initiate transmission
+            WHEN "100" =>       --End
+            WHEN OTHERS =>
+           END CASE;
+        END IF;
     END PROCESS;          
-
-
-STANDBY: PROCESS(standby_clock)
-    BEGIN
-    END PROCESS;
 
 -------------------------------------------------------------------------------------------------------
 -------------------------------------  PORT MAPS ------------------------------------------------------
@@ -181,8 +222,8 @@ PORT MAP (
     clock_100MHz => fpga_clock,
     clock_1p3615MHz => manchester_clock, 
     data_bus => main_data_bus, 
-    man1_out => man1_out,
-    man2_out => man2_out, 
+    man1_out => man1_temp_output,
+    man2_out => man2_temp_output, 
     start_tx => begin_transmission, 
     reset => reset_line,   
     overload => man_overload, 
