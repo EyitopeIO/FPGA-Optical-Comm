@@ -117,8 +117,6 @@ ARCHITECTURE jumpstart OF main IS
     SIGNAL manchester_clock : STD_LOGIC ;
     SIGNAL standby_clock : STD_LOGIC ;
     
-    SIGNAL man1_temp_output : STD_LOGIC ;
-    SIGNAL man2_temp_output : STD_LOGIC ;
     SIGNAL man_overload : STD_LOGIC ;
     SIGNAL man_idle : STD_LOGIC ;
     
@@ -139,22 +137,18 @@ ARCHITECTURE jumpstart OF main IS
         
 BEGIN
 
-    -- To drive 5V logic with 3.3V FPGA output using logic shifter with NPN transistor
-    manchester1 <= not man1_temp_output ;
-    manchester2 <= not man2_temp_output ;
-
     fpga_clock <= clock ;
 
-    overrun <= '1' WHEN uart_rx_error='1' OR man_overload='1' ELSE standby_clock ;
+    overrun <= '1' WHEN uart_rx_error='1' OR man_overload='1' ELSE '0' ;
     uart_activity <= '1' WHEN uart_rx_busy='1' ELSE '0' ;
-    --standby <= '1' WHEN man_idle='1' ELSE '0' ;  
+    standby <= standby_clock WHEN man_idle='1' ELSE '0' ;  
         
 MAIN: PROCESS(fpga_clock, reset)
     BEGIN
         IF (init_line='0') THEN         --One-time setup here
             reset_line <= '0' ;
             init_line <= '1' ;
-        
+            
         ELSIF (reset='1') THEN 
             reset_line <= '1' ;
             reset_line <= '1' ;
@@ -222,8 +216,8 @@ PORT MAP (
     clock_100MHz => fpga_clock,
     clock_1p3615MHz => manchester_clock, 
     data_bus => main_data_bus, 
-    man1_out => man1_temp_output,
-    man2_out => man2_temp_output, 
+    man1_out => manchester1,
+    man2_out => manchester2, 
     start_tx => begin_transmission, 
     reset => reset_line,   
     overload => man_overload, 
