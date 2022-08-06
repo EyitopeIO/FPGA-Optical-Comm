@@ -22,8 +22,9 @@ ENTITY main IS
         reset : IN STD_LOGIC ; 
 
         standby : OUT STD_LOGIC ;
-        uart_activity : OUT STD_LOGIC ;
-        overrun : OUT STD_LOGIC ;
+
+        uart_error : OUT STD_LOGIC ;
+        manc_error : OUT STD_LOGIC ;
         
         Anode_Activate : OUT STD_LOGIC_VECTOR (3 DOWNTO 0) ;
         LED_out : OUT STD_LOGIC_VECTOR (6 DOWNTO 0)     
@@ -139,9 +140,9 @@ BEGIN
 
     fpga_clock <= clock ;
 
-    overrun <= '1' WHEN uart_rx_error='1' OR man_overload='1' ELSE '0' ;
-    uart_activity <= '1' WHEN uart_rx_busy='1' ELSE '0' ;
-    standby <= standby_clock WHEN man_idle='1' ELSE '0' ;  
+    uart_error <= '1' WHEN uart_rx_error='1' ELSE '0' ;
+    manc_error <= '1' WHEN man_overload='1' ELSE '0' ;
+    standby <= standby_clock WHEN man_idle='1' ELSE '1' ;  
         
 MAIN: PROCESS(fpga_clock, reset)
     BEGIN
