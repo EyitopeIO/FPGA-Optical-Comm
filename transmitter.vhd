@@ -119,7 +119,6 @@ MAIN: PROCESS(clock_100MHz, reset)
                                                                                                                            
                 WHEN OTHERS =>
                     manchester_begin_transmission <= '0' ;                           
-                    led_idle <= '1' ;                                      
             END CASE;
             
         END IF;

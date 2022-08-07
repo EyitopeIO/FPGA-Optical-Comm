@@ -20,7 +20,7 @@ begin
     );
     
     reset <= '1' AFTER 1 ns, '0' AFTER 9 ns ;
-    load <= '1' AFTER 10 ns, '0' AFTER 60 ns ; 
+    load <= '1' AFTER 5 ns, '0' AFTER 60 ns, '1' AFTER 73 ns ; 
     bits8 <= x"4E" AFTER 10 ns, x"1A" AFTER 20 ns, x"BC" AFTER 30 ns, x"FF" AFTER 40 ns, x"01" AFTER 50 ns ;
     
     CLK: PROCESS
