@@ -21,7 +21,7 @@ begin
     
     reset <= '1' AFTER 1 ns, '0' AFTER 9 ns ;
     fetch <= '1' AFTER 10 ns, '0' AFTER 60 ns, '1' AFTER 80 ns ; 
-    bits32 <= x"D45ABFE1" AFTER 10 ns, x"3ADB1803" AFTER 30 ns ;
+    bits32 <= x"D45ABFE1" AFTER 10 ns, x"3ADB1803" AFTER 30 ns, x"5ED91A0F" AFTER 70 ns ;
     
     CLK: PROCESS
     BEGIN

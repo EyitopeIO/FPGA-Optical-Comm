@@ -22,24 +22,18 @@ BEGIN
 MAIN: PROCESS(clock, reset)
     BEGIN
         IF (reset='1') THEN
-            bits8 <= x"00" ;
             ready <= '0' ;
             byten <= "111" ;
 
         ELSIF RISING_EDGE(clock) THEN
             IF (fetch='1') THEN      
-
                 CASE byten IS
                 
-                    WHEN "111" =>
-                        input_line <= bits32 ;
-                        byten <= "000" ;
                     WHEN "000" =>       --The first byte in 32bits
                         ready <= '1' ;
                         bits8 <= input_line(31 DOWNTO 24) ;
                         byten <= "001" ;                    
-                    WHEN "001" =>
-                        ready <= '0' ;
+                    WHEN "001" =>       
                         bits8 <= input_line(23 DOWNTO 16) ;
                         byten <= "010" ;
                     WHEN "010" =>
@@ -48,6 +42,10 @@ MAIN: PROCESS(clock, reset)
                     WHEN "011" =>
                         bits8 <= input_line(7 DOWNTO 0) ;
                         byten <= "111" ;
+                    WHEN "111" =>       --Latch on to data at ports
+                        ready <= '0' ;
+                        input_line <= bits32 ;
+                        byten <= "000" ;
                     WHEN OTHERS =>  --Never happening
                         ready <= '0' ;
                 END CASE;
