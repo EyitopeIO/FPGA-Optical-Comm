@@ -7,7 +7,7 @@ ENTITY main IS
 
     GENERIC(
         master_clock   :   NATURAL := 100_000_000 ;
-        uart_baud_rate :   INTEGER := 9600 ;
+        uart_baud_rate :   INTEGER := 28800 ;
         uart_d_width   :   NATURAL := 8
     );
     
