@@ -7,7 +7,7 @@ ENTITY main IS
 
     GENERIC(
         master_clock   :   NATURAL := 100_000_000 ;
-        uart_baud_rate :   INTEGER := 19200 ;
+        uart_baud_rate :   INTEGER := 9600 ;
         uart_d_width   :   NATURAL := 8
     );
     
@@ -125,15 +125,24 @@ ARCHITECTURE jumpstart OF main IS
 
     SIGNAL uart_rx_error : STD_LOGIC ;
     SIGNAL uart_rx_busy : STD_LOGIC ;
+    SIGNAL uart_tx_busy : STD_LOGIC ;
+    SIGNAL uart_tx_ena : STD_LOGIC := '0' ;
+    SIGNAL uart_data_bus_rx : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
+    SIGNAL uart_data_bus_tx : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
+    SIGNAL uart_data_next : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
+    SIGNAL uart_tx_pending : STD_LOGIC := '0' ;
+
     SIGNAL begin_transmission : STD_LOGIC := '0' ;
 
     SIGNAL main_data_bus : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
-    SIGNAL uart_data_bus : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
 
     SIGNAL loader_is_ready : STD_LOGIC ; 
     SIGNAL loader_activate : STD_LOGIC ;
     
     SIGNAL txstate : UNSIGNED(2 DOWNTO 0) := "000" ;
+
+    --SIGNAL dnumber : UNSIGNED(15 DOWNTO 0) := x"0000" ;
+    SIGNAL vnumber : STD_LOGIC_VECTOR(15 DOWNTO 0) ;
     
         
 BEGIN
@@ -143,7 +152,7 @@ BEGIN
     uart_error <= '1' WHEN uart_rx_error='1' ELSE '0' ;
     manc_error <= '1' WHEN man_overload='1' ELSE '0' ;
     standby <= standby_clock WHEN man_idle='1' ELSE '1' ;  
-        
+    
 MAIN: PROCESS(fpga_clock, reset)
     BEGIN
         IF (init_line='0') THEN         --One-time setup here
@@ -166,16 +175,20 @@ MAIN: PROCESS(fpga_clock, reset)
  -------------------------------------------------------------                                 
             WHEN "001" =>       --Waiting for UART to receive 8 bits
                 IF (uart_rx_busy='0') THEN      --8 bits ready on bus
+
+                    uart_tx_pending <= '1' ;
+
                     loader_activate <= '1' ;
-                    IF (loader_is_ready='1') THEN
-                        IF (man_idle='1') THEN
-                            begin_transmission <= '1' ;
-                        END IF;
-                    END IF;
                     txstate <= "010" ;
+
+                    IF (loader_is_ready='1' AND man_idle='1') THEN
+                        begin_transmission <= '1' ;
+                    END IF;
                 END IF;
+
  ------------------------------------------------------------                              
             WHEN "010" =>       --Return to waiting state
+                uart_tx_pending <= '0' ;
                 loader_activate <= '0' ;
                 begin_transmission <= '0' ;
                 txstate <= "000" ;
@@ -187,21 +200,33 @@ MAIN: PROCESS(fpga_clock, reset)
         END IF;
     END PROCESS;          
 
+
+FBTX: PROCESS(fpga_clock)
+    BEGIN
+        IF (uart_tx_pending='1') THEN  
+            uart_data_bus_tx <= uart_data_bus_rx ;           
+            uart_tx_ena <= '1' ;
+        ELSE
+            uart_tx_ena <= '0' ;
+        END IF;
+    END PROCESS;
+
+
 -------------------------------------------------------------------------------------------------------
--------------------------------------  PORT MAPS ------------------------------------------------------
+-----------------------------------(--  PORT MAPS ------------------------------------------------------
 -------------------------------------------------------------------------------------------------------
 
 PCCONN: uart
 GENERIC MAP (clk_freq => master_clock, baud_rate => uart_baud_rate, d_width => uart_d_width)
 PORT MAP (
     clk => fpga_clock,  
-    tx_ena => ground_line, 
-    tx_data => (OTHERS=>'0'),
+    tx_ena => uart_tx_ena, 
+    tx_data => uart_data_bus_tx,
     rx => uart_rx, 
     rx_busy => uart_rx_busy, 
     rx_error => uart_rx_error, 
-    rx_data => uart_data_bus,
-    tx_busy => OPEN,
+    rx_data => uart_data_bus_rx,
+    tx_busy => uart_tx_busy,
     tx => uart_tx
 );                           
 
@@ -227,12 +252,21 @@ PORT MAP (
 
 BITCONN: loader8_to_32
 PORT MAP (
-    bits8 => uart_data_bus, 
+    bits8 => uart_data_bus_rx, 
     clock => fpga_clock, 
     reset => reset_line,
     ready => loader_is_ready,
     load => loader_activate, 
     bits32 => main_data_bus        
+);
+
+DISPLAY: lcdbox
+PORT MAP (
+    rst => reset_line,       
+    number => vnumber,
+    LED_out => LED_out, 
+    clock_100Mhz => fpga_clock,
+    Anode_Activate => Anode_Activate
 );
 
 END jumpstart;
