@@ -122,7 +122,6 @@ BEGIN
 
     idle_line <= clock_1Hz_line WHEN rxaction="000" OR rxaction="001" ELSE '1' ;
     
-    display_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(symbol_count, 16)) ;
    --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
    
    man1_temp <= not man1_in ;
