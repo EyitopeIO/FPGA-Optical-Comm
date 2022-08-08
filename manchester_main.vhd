@@ -22,6 +22,9 @@ ENTITY main IS
         reset :      IN STD_LOGIC; 
 
         overload : OUT STD_LOGIC ;
+
+        cathode : OUT STD_LOGIC_VECTOR (6 DOWNTO 0) ;
+        anode : OUT STD_LOGIC_VECTOR (3 DOWNTO 0) ;
         
 --         test_tout : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; 
 --         test_man1 : OUT STD_LOGIC;
@@ -51,6 +54,16 @@ ARCHITECTURE monarch OF main IS
       );
     END COMPONENT;
 
+    COMPONENT lcdbox IS
+    PORT (
+        rst :            IN STD_LOGIC ;         
+        number :         IN STD_LOGIC_VECTOR(15 DOWNTO 0) ;
+        LED_out :        OUT STD_LOGIC_VECTOR (6 DOWNTO 0) ; 
+        clock_100Mhz :   IN STD_LOGIC ;
+        Anode_Activate : OUT STD_LOGIC_VECTOR (3 DOWNTO 0)
+    );
+    END COMPONENT;
+
     COMPONENT srom IS
     PORT (
         data : OUT STD_LOGIC_VECTOR(31 DOWNTO 0) ; --make a process sensitive to this
@@ -72,7 +85,7 @@ ARCHITECTURE monarch OF main IS
     SIGNAL global_reset_line : STD_LOGIC := '0' ;
     SIGNAL init_line : STD_LOGIC := '0' ;
     
-    SIGNAL clock_70kHz_line : STD_LOGIC ;
+    SIGNAL clock_1Hz_line : STD_LOGIC ;
     SIGNAL clock_1p3615MHz_line : STD_LOGIC ;
     
     SIGNAL manchester_begin_transmission : STD_LOGIC := '0' ;
@@ -97,6 +110,8 @@ ARCHITECTURE monarch OF main IS
     
     SIGNAL txaction : UNSIGNED(2 DOWNTO 0) := "000" ;
     
+    SIGNAL vnumber : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;    
+    
 BEGIN
 
     -- To drive 5V logic with 3.3V FPGA output, additional transistor was needed.
@@ -109,7 +124,8 @@ BEGIN
     data_bus_line_for_man1_transmission <= main_data_bus_line_for_all_out(31 DOWNTO 16) ;
 
     overload <= '1' WHEN manchester1_overrun_error='1' OR manchester2_overrun_error='1' ELSE '0' ;
-        
+    led_idle <= clock_1Hz_line WHEN txaction="000" ELSE '0' ;
+
 --     test_man1 <= manchester1_ready_for_data_on_din ;
 --     test_man2 <= manchester2_ready_for_data_on_din ;
 --     test_querry <= srom_querry ;
@@ -125,20 +141,20 @@ MAIN: PROCESS(clock, reset)
             srom_querry <= '0' ;
             manchester_begin_transmission <= '0' ;
             global_reset_line <= '1' ;
-            led_idle <= '0' ;
             init_line <= '1' ;
             txaction <= "000" ;
+            vnumber <= x"0000" ;
             
         ELSIF (RISING_EDGE(clock)) THEN
             
             CASE txaction IS    
                 WHEN "000" =>    --Ready to begin transmission
+                    
                     IF (start_tx = '1' OR tx_mode = '1') THEN
                         srom_reset <= '0' ;
                         srom_querry <= '1' ;
                         global_reset_line <= '0' ;
                         manchester_begin_transmission <= '0' ;
-                        led_idle <= '0' ;
                         txaction <= "001" ;
                     END IF;
                                      
@@ -176,18 +192,20 @@ MAIN: PROCESS(clock, reset)
                         srom_querry <= '0' ;
                         global_reset_line <= '1' ;
                         manchester_begin_transmission <= '0' ;
-                        led_idle <= '0' ;
-                        txaction <= "110" ;         
+                        txaction <= "110" ;
+                        vnumber <= x"FFFF" ;         
                     ELSE
                         txaction <= "111" ;
                     END IF;
                     
-                WHEN "110" =>   --empty state to allow a clock cycle
+                WHEN "110" =>       --empty state to allow a clock cycle
                     txaction <= "000" ;
+
+                WHEN "111" =>       --Idle mode when system is in manual mode
+                    vnumber <= x"D09E" ;
                                  
-                WHEN OTHERS =>
-                    manchester_begin_transmission <= '0' ;                           
-                    led_idle <= '1' ; 
+                WHEN OTHERS =>      --Never happening
+                    vnumber <= x"EEEE" ; 
                                      
             END CASE;
             
@@ -205,7 +223,7 @@ PORT MAP (
     clock_100MHz => clock,
     clock_10MHz => clock_1p3615MHz_line,
     clock_70kHz => OPEN, 
-    clock_1Hz => OPEN
+    clock_1Hz => clock_1Hz_line
 );
 
 DATASRC: srom
@@ -239,6 +257,15 @@ PORT MAP (
     txd => man2_temp_output,
     or_err => manchester2_overrun_error,
     tx_idle => manchester2_ready_for_data_on_din
+);
+
+DISPLAY: lcdbox
+PORT MAP (
+    rst => global_reset_line,       
+    number => vnumber,
+    LED_out => cathode, 
+    clock_100Mhz => clock,
+    Anode_Activate => anode
 );
 
 END monarch;
