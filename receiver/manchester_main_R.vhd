@@ -7,8 +7,8 @@ ENTITY mainR IS
     GENERIC(
         master_clock        :   NATURAL     := 100_000_000;
         data_bus_width      :   NATURAL     := 16;
-        uart_baud_rate      :   INTEGER     := 9600;
-        memory_size         :   INTEGER     := 46
+        uart_baud_rate      :   INTEGER     := 115200;
+        memory_size         :   INTEGER     := 403
     );
     
     PORT (
