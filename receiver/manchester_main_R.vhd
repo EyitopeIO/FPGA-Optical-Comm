@@ -7,8 +7,8 @@ ENTITY mainR IS
     GENERIC(
         master_clock        :   NATURAL     := 100_000_000;
         data_bus_width      :   NATURAL     := 16;
-        uart_baud_rate      :   INTEGER     := 9600;
-        memory_size         :   INTEGER     := 46
+        uart_baud_rate      :   INTEGER     := 115200;
+        memory_size         :   INTEGER     := 403
     );
     
     PORT (
@@ -105,6 +105,9 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbol_error_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;  --Also used as displayed number    
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
     SIGNAL symbol_count : INTEGER RANGE 0 TO 65536 := 0 ;      --Used in manual mode only
+
+    SIGNAL statusvis : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
+    SIGNAL statusaction : STD_LOGIC := '0' ;
     
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
@@ -116,8 +119,9 @@ BEGIN
     
     overload <= '1' WHEN symbol_error_count > 8192 ELSE '0' ;       --8192 is half of maximum count; just to see what's going on
     led_idle <= idle_line ;
+
+    idle_line <= clock_1Hz_line WHEN rxaction="000" OR rxaction="001" ELSE '1' ;
     
-    display_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(symbol_count, 16)) ;
    --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
    
    man1_temp <= not man1_in ;
@@ -136,6 +140,22 @@ SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
     END PROCESS;    
 
 
+DONESTATUS: PROCESS(clock_1Hz_line)
+    BEGIN
+        IF (RISING_EDGE(clock_1Hz_line)) THEN
+            IF (rxaction="100") THEN
+                IF (statusaction='0') THEN
+                    display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
+                    statusaction <= '1' ;
+                ELSE
+                    display_bus <= statusvis ;
+                    statusaction <= '0' ;
+                END IF;
+            END IF;
+        END IF;
+    END PROCESS; 
+
+
 MAIN: PROCESS(clock, reset)
     BEGIN             
         IF (init_line='0' OR reset='1') THEN  --Self reset on startup   
@@ -146,7 +166,7 @@ MAIN: PROCESS(clock, reset)
             symbols_equal <= '0' ;
             symbol_count <= 0 ;
             init_line <= '1' ;
-            idle_line <= '0' ;
+            statusvis <= x"0000" ;
             rxaction <= "000" ;
 
         ELSIF RISING_EDGE(clock) THEN
@@ -159,38 +179,27 @@ MAIN: PROCESS(clock, reset)
                     symbol_error_count <= x"0000" ;
                     symbols_equal <= '0' ;
                     symbol_count <= 0 ;
-                    idle_line <= '0' ;
                     rxaction <= "001" ;
                     
                 WHEN "001" =>       --Waiting for reception to begin              
                     srom_querry <= '0' ;
                     srom_reset <= '0' ;                    
                     IF (manchester1_idle='0' AND manchester2_idle='0') THEN
-                        idle_line <= '0' ;
                         rxaction <= "010" ;
                     END IF;
                     
                 WHEN "010" =>       --Receiving the data
-
---                    IF (manchester1_frame_error='1' OR manchester2_frame_error='1') THEN
---                        symbol_error_count <= x"EEEE" ;
---                        --rxaction <= "111" ;     --Just stop
---                    END IF;
-
                     IF (manchester1_idle='1'AND manchester2_idle='1') THEN    --Data completely received
-                                  
-                       
-                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count = 46 ) THEN      --We successfully received all
-                            symbol_error_count <= x"D09E" ;
-                            rxaction <= "011" ;
+                                        
+                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count >= memory_size ) THEN      --We successfully received all
+                            rxaction <= "100" ;
 
-                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < 46 ) THEN      --An error in received data
+                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < memory_size ) THEN      --An error in received data
                             symbol_error_count <= symbol_error_count + 1 ;
                             rxaction <= "011" ;
 
-                        ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > 46 ) THEN     --Received all for sure
-                            symbol_error_count <= x"FFFF" ;
-                            rxaction <= "100" ;
+                        ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > memory_size ) THEN     --Received all for sure
+                            rxaction <= "101" ;
                             
                         ELSE
                             rxaction <= "010" ;
@@ -203,18 +212,22 @@ MAIN: PROCESS(clock, reset)
                     
                 WHEN "011" =>       --Received state. Load the comparison line and do other stuff
                     srom_querry <= '1' ;
---                    IF (symbol_count_reset='1') THEN
---                        symbol_error_count <= x"0000" ;
---                    END IF;
 
                     IF (rx_mode = '1') THEN
                         rxaction <= "001" ;
                     ELSE
                         rxaction <= "100" ;
                     END IF;
+
+                WHEN "100" =>
+                    statusvis <= x"D09E" ;
+
+                WHEN "101" =>
+                    statusvis <= x"FFFF" ;
                 
                 WHEN OTHERS =>
-                    idle_line <= '1' ;
+                    statusvis <= x"EEEE" ;
+
                                
             END CASE;
     
@@ -222,7 +235,8 @@ MAIN: PROCESS(clock, reset)
     END PROCESS;          
 
 
--------------------------------------------------------------------------------------------------------
+
+    -------------------------------------------------------------------------------------------------------
 -------------------------------------  PORT MAPS ------------------------------------------------------
 -------------------------------------------------------------------------------------------------------
 
