@@ -146,10 +146,11 @@ DONESTATUS: PROCESS(clock_1Hz_line)
             IF (rxaction="100") THEN
                 IF (statusaction='0') THEN
                     display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
+                    statusaction <= '1' ;
                 ELSE
                     display_bus <= statusvis ;
+                    statusaction <= '0' ;
                 END IF;
-            statusaction <= NOT statusaction ;
             END IF;
         END IF;
     END PROCESS; 
@@ -190,16 +191,14 @@ MAIN: PROCESS(clock, reset)
                     IF (manchester1_idle='1'AND manchester2_idle='1') THEN    --Data completely received
                                         
                         IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count >= memory_size ) THEN      --We successfully received all
-                            statusvis <= x"D09E" ;
-                            rxaction <= "011" ;
+                            rxaction <= "100" ;
 
                         ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < memory_size ) THEN      --An error in received data
                             symbol_error_count <= symbol_error_count + 1 ;
                             rxaction <= "011" ;
 
                         ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > memory_size ) THEN     --Received all for sure
-                            statusvis <= x"FFFF" ;
-                            rxaction <= "100" ;
+                            rxaction <= "101" ;
                             
                         ELSE
                             rxaction <= "010" ;
@@ -220,9 +219,14 @@ MAIN: PROCESS(clock, reset)
                     END IF;
 
                 WHEN "100" =>
+                    statusvis <= x"D09E" ;
 
+                WHEN "101" =>
+                    statusvis <= x"FFFF" ;
                 
                 WHEN OTHERS =>
+                    statusvis <= x"EEEE" ;
+
                                
             END CASE;
     
