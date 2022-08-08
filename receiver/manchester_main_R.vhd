@@ -105,6 +105,9 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbol_error_count : UNSIGNED(15 DOWNTO 0) := x"0000" ;  --Also used as displayed number    
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
     SIGNAL symbol_count : INTEGER RANGE 0 TO 65536 := 0 ;      --Used in manual mode only
+
+    SIGNAL statusvis : STD_LOGIC_VECTOR(15 DOWNTO 0) ;
+    SIGNAL statusaction : STD_LOGIC := '0' ;
     
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     
@@ -136,6 +139,21 @@ SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
             symbol_count_reset <= '0' ;
         END IF;
     END PROCESS;    
+
+
+DONESTATUS: PROCESS(clock_1Hz_line)
+    BEGIN
+        IF (RISING_EDGE(clock_1Hz_line)) THEN
+            IF (rxaction="100") THEN
+                IF (statusaction='0') THEN
+                    display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
+                ELSE
+                    display_bus <= statusvis ;
+                END IF;
+            statusaction <= NOT statusaction ;
+            END IF;
+        END IF;
+    END PROCESS; 
 
 
 MAIN: PROCESS(clock, reset)
@@ -172,8 +190,8 @@ MAIN: PROCESS(clock, reset)
                 WHEN "010" =>       --Receiving the data
                     IF (manchester1_idle='1'AND manchester2_idle='1') THEN    --Data completely received
                                         
-                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count = memory_size ) THEN      --We successfully received all
-                            symbol_error_count <= x"D09E" ;
+                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count >= memory_size ) THEN      --We successfully received all
+                            statusvis <= x"D09E" ;
                             rxaction <= "011" ;
 
                         ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < memory_size ) THEN      --An error in received data
@@ -181,7 +199,7 @@ MAIN: PROCESS(clock, reset)
                             rxaction <= "011" ;
 
                         ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > memory_size ) THEN     --Received all for sure
-                            symbol_error_count <= x"FFFF" ;
+                            statusvis <= x"FFFF" ;
                             rxaction <= "100" ;
                             
                         ELSE
@@ -201,6 +219,9 @@ MAIN: PROCESS(clock, reset)
                     ELSE
                         rxaction <= "100" ;
                     END IF;
+
+                WHEN "100" =>
+
                 
                 WHEN OTHERS =>
                                
@@ -210,7 +231,8 @@ MAIN: PROCESS(clock, reset)
     END PROCESS;          
 
 
--------------------------------------------------------------------------------------------------------
+
+    -------------------------------------------------------------------------------------------------------
 -------------------------------------  PORT MAPS ------------------------------------------------------
 -------------------------------------------------------------------------------------------------------
 
