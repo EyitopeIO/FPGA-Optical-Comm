@@ -89,15 +89,9 @@ ARCHITECTURE monarch OF main IS
     SIGNAL data_bus_line_for_man1_transmission:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0);
     SIGNAL data_bus_line_for_man2_transmission:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0);     
 
---    SIGNAL data_bus_line_for_man1_reception:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0);
---    SIGNAL data_bus_line_for_man2_reception:  STD_LOGIC_VECTOR(data_bus_width-1 DOWNTO 0); 
-
     SIGNAL main_data_bus_line_for_all_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
     SIGNAL temp_trans_out : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
 
-    --SIGNAL main_data_bus_line_for_all_in : STD_LOGIC_VECTOR(31 DOWNTO 0) ;
-
-    --SIGNAL small_data_bus : STD_LOGIC_VECTOR(7 DOWNTO 0) ;
     SIGNAL srom_reset : STD_LOGIC ;
     SIGNAL srom_querry : STD_LOGIC ; 
     
@@ -122,7 +116,6 @@ BEGIN
 --     test_manbeg <= manchester_begin_transmission ;    
     
 MAIN: PROCESS(clock, reset)
---        VARIABLE srom_count : INTEGER RANGE 0 TO 1 := 0 ;
     BEGIN     
         main_data_bus_line_for_all_out <= temp_trans_out ;
 --        test_tout <= temp_trans_out ;
