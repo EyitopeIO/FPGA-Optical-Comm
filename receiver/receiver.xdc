@@ -38,3 +38,8 @@ set_property PACKAGE_PIN W5 [get_ports clock]
 set_property IOSTANDARD LVCMOS33 [get_ports clock]
 set_property PACKAGE_PIN N3 [get_ports overload]
 set_property IOSTANDARD LVCMOS33 [get_ports overload]
+
+set_property IOSTANDARD LVCMOS33 [get_ports uart_tx]
+set_property IOSTANDARD LVCMOS33 [get_ports uart_rx]
+set_property PACKAGE_PIN B18 [get_ports uart_rx]
+set_property PACKAGE_PIN A18 [get_ports uart_tx]
