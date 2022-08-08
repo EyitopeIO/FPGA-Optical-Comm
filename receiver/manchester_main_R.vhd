@@ -116,6 +116,8 @@ BEGIN
     
     overload <= '1' WHEN symbol_error_count > 8192 ELSE '0' ;       --8192 is half of maximum count; just to see what's going on
     led_idle <= idle_line ;
+
+    idle_line <= clock_1Hz_line WHEN rxaction="000" OR rxaction="001" ELSE '1' ;
     
     display_bus <= STD_LOGIC_VECTOR(TO_UNSIGNED(symbol_count, 16)) ;
    --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
@@ -146,7 +148,6 @@ MAIN: PROCESS(clock, reset)
             symbols_equal <= '0' ;
             symbol_count <= 0 ;
             init_line <= '1' ;
-            idle_line <= '0' ;
             rxaction <= "000" ;
 
         ELSIF RISING_EDGE(clock) THEN
@@ -159,14 +160,12 @@ MAIN: PROCESS(clock, reset)
                     symbol_error_count <= x"0000" ;
                     symbols_equal <= '0' ;
                     symbol_count <= 0 ;
-                    idle_line <= '0' ;
                     rxaction <= "001" ;
                     
                 WHEN "001" =>       --Waiting for reception to begin              
                     srom_querry <= '0' ;
                     srom_reset <= '0' ;                    
                     IF (manchester1_idle='0' AND manchester2_idle='0') THEN
-                        idle_line <= '0' ;
                         rxaction <= "010" ;
                     END IF;
                     
@@ -214,7 +213,6 @@ MAIN: PROCESS(clock, reset)
                     END IF;
                 
                 WHEN OTHERS =>
-                    idle_line <= '1' ;
                                
             END CASE;
     
