@@ -106,7 +106,7 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL symbol_count_reset : STD_LOGIC := '0' ;
     SIGNAL symbol_count : INTEGER RANGE 0 TO 65536 := 0 ;      --Used in manual mode only
 
-    SIGNAL statusvis : STD_LOGIC_VECTOR(15 DOWNTO 0) ;
+    SIGNAL statusvis : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
     SIGNAL statusaction : STD_LOGIC := '0' ;
     
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
@@ -166,6 +166,7 @@ MAIN: PROCESS(clock, reset)
             symbols_equal <= '0' ;
             symbol_count <= 0 ;
             init_line <= '1' ;
+            statusvis <= x"0000" ;
             rxaction <= "000" ;
 
         ELSIF RISING_EDGE(clock) THEN
