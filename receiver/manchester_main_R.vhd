@@ -170,24 +170,17 @@ MAIN: PROCESS(clock, reset)
                     END IF;
                     
                 WHEN "010" =>       --Receiving the data
-
---                    IF (manchester1_frame_error='1' OR manchester2_frame_error='1') THEN
---                        symbol_error_count <= x"EEEE" ;
---                        --rxaction <= "111" ;     --Just stop
---                    END IF;
-
                     IF (manchester1_idle='1'AND manchester2_idle='1') THEN    --Data completely received
-                                  
-                       
-                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count = 46 ) THEN      --We successfully received all
+                                        
+                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count = memory_size ) THEN      --We successfully received all
                             symbol_error_count <= x"D09E" ;
                             rxaction <= "011" ;
 
-                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < 46 ) THEN      --An error in received data
+                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < memory_size ) THEN      --An error in received data
                             symbol_error_count <= symbol_error_count + 1 ;
                             rxaction <= "011" ;
 
-                        ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > 46 ) THEN     --Received all for sure
+                        ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > memory_size ) THEN     --Received all for sure
                             symbol_error_count <= x"FFFF" ;
                             rxaction <= "100" ;
                             
@@ -202,9 +195,6 @@ MAIN: PROCESS(clock, reset)
                     
                 WHEN "011" =>       --Received state. Load the comparison line and do other stuff
                     srom_querry <= '1' ;
---                    IF (symbol_count_reset='1') THEN
---                        symbol_error_count <= x"0000" ;
---                    END IF;
 
                     IF (rx_mode = '1') THEN
                         rxaction <= "001" ;
