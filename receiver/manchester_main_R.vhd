@@ -13,10 +13,10 @@ ENTITY mainR IS
     );
     
     PORT (
-        clock:      IN STD_LOGIC;
-        man1_in:   IN STD_LOGIC; --connect to high speed port
-        man2_in:   IN STD_LOGIC;        
-        reset :      IN STD_LOGIC;
+        clock : IN STD_LOGIC;
+        man1_in : IN STD_LOGIC; --connect to high speed port
+        man2_in :IN STD_LOGIC;        
+        reset : IN STD_LOGIC;
         rx_mode : IN STD_LOGIC ;
 
         uart_rx : IN STD_LOGIC ;
@@ -32,34 +32,19 @@ ENTITY mainR IS
 END mainR;
 
 ARCHITECTURE monarch OF mainR IS
-    COMPONENT uart IS
-    GENERIC(
-        clk_freq  :  INTEGER ; 
-        baud_rate :  INTEGER ;     
-        d_width   :  INTEGER         
-    );
-    PORT(
-        clk      :  IN   STD_LOGIC;                             
-        tx_ena   :  IN   STD_LOGIC;                             
-        tx_data  :  IN   STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0);  
-        rx       :  IN   STD_LOGIC;                          
-        rx_busy  :  OUT  STD_LOGIC;                           
-        rx_error :  OUT  STD_LOGIC;                             
-        rx_data  :  OUT  STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0); 
-        tx_busy  :  OUT  STD_LOGIC;                           
-        tx       :  OUT  STD_LOGIC                          
-    );
-    END COMPONENT;
-    --------------------------------------------- 
-    ---------------------------------------------
+ 
     COMPONENT loader32_to_8 IS
     PORT (
-        bits8 : OUT STD_LOGIC_VECTOR(7 DOWNTO 0) ;
         clock : IN STD_LOGIC ;
+        
         reset : IN STD_LOGIC ;
-        ready : OUT STD_LOGIC ;
-        fetch : IN STD_LOGIC ;
-        bits32 : IN STD_LOGIC_VECTOR(31 DOWNTO 0)        
+        idle : OUT STD_LOGIC ;
+        trigger : IN STD_LOGIC ;
+
+        bits32 : IN STD_LOGIC_VECTOR(31 DOWNTO 0) ;    
+        
+        uart_rx : IN STD_LOGIC ;
+        uart_tx : OUT STD_LOGIC       
     );
     END COMPONENT;
 
@@ -144,22 +129,10 @@ ARCHITECTURE monarch OF mainR IS
     SIGNAL statusaction : STD_LOGIC := '0' ;
     
     SIGNAL display_bus : STD_LOGIC_VECTOR(15 DOWNTO 0) := x"0000" ;
-    
 
-    SIGNAL uart_rx_error : STD_LOGIC ;
-    SIGNAL uart_rx_busy : STD_LOGIC ;
-    SIGNAL uart_tx_busy : STD_LOGIC ;
-    SIGNAL uart_tx_ena : STD_LOGIC := '0' ;
-    SIGNAL uart_data_bus_rx : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
-    SIGNAL uart_data_bus_tx : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
-    SIGNAL uart_data_next : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
-    SIGNAL uart_tx_pending : STD_LOGIC := '0' ;
-    SIGNAL uart_action : STD_LOGIC := '0' ;
-    SIGNAL uart_activate : STD_LOGIC := '0' ; 
-    SIGNAL uart_bytecow : UNSIGNED(1 DOWNTO 0) := "00" ;
-
-    SIGNAL loader_is_ready : STD_LOGIC ; 
     SIGNAL loader_activate : STD_LOGIC ;
+    SIGNAL loader_is_idle : STD_LOGIC ;
+
 BEGIN
     
     --MSB first. Bus reads zero on reset.
@@ -169,12 +142,12 @@ BEGIN
     overload <= '1' WHEN symbol_error_count > 8192 ELSE '0' ;       --8192 is half of maximum count; just to see what's going on
     led_idle <= idle_line ;
 
-    idle_line <= clock_1Hz_line WHEN rxaction="000" OR rxaction="001" ELSE '1' ;
+    idle_line <= clock_1Hz_line WHEN rxaction="000" OR rxaction="001" OR loader_is_idle='1' ELSE '1' ;
     
-   --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
+    --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
    
-   man1_temp <= not man1_in ;
-   man2_temp <= not man2_in ;
+    man1_temp <= not man1_in ;
+    man2_temp <= not man2_in ;
 
   
 SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
@@ -189,40 +162,12 @@ SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
     END PROCESS;    
 
 
-UARTCOMMS: PROCESS(clock)
+DONESTATUS: PROCESS(clock_1Hz_line, global_reset_line)
     BEGIN
-        IF (RISING_EDGE(clock)) THEN
-            CASE uart_action IS
-
-                WHEN '0' =>        --Idle and waiting for event
-                    IF (uart_activate='1' AND loader_is_ready='1') THEN        --MSB goes out via UART
-                        uart_tx_ena <= '1' ;
-                        uart_action <= '1' ;
-                        uart_bytecow <= uart_bytecow + 1 ;
-                    END IF;
-
-                WHEN '1' =>        --Stay here until UART sends out all
-                    IF (uart_tx_busy='1') THEN
-                        uart_tx_ena <= '0' ;
-                    ELSIF uart_bytecow < "11" THEN
-                        uart_tx_ena <= '1' ;
-                        uart_bytecow <= uart_bytecow + 1 ;
-                    ELSE
-                        uart_tx_ena <= '0' ;
-                        uart_bytecow <= "00" ;
-                        uart_action <= '0' ;
-                    END IF;
-
-                WHEN OTHERS =>
-            END CASE;
-        END IF;
-END PROCESS;
-
-
-DONESTATUS: PROCESS(clock_1Hz_line)
-    BEGIN
-        IF (RISING_EDGE(clock_1Hz_line)) THEN
-            IF (rxaction="100") THEN
+        IF (global_reset_line='1') THEN
+            display_bus <= x"0000" ;
+        ELSIF (RISING_EDGE(clock_1Hz_line)) THEN
+            IF (rxaction="100" OR rxaction="101" OR rxaction="111") THEN
                 IF (statusaction='0') THEN
                     display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
                     statusaction <= '1' ;
@@ -263,7 +208,6 @@ MAIN: PROCESS(clock, reset)
                 WHEN "001" =>       --Waiting for reception to begin              
                     srom_querry <= '0' ;
                     srom_reset <= '0' ; 
-                    uart_activate <= '0' ; 
 
                     IF (manchester1_idle='0' AND manchester2_idle='0') THEN
                         rxaction <= "010" ;
@@ -272,22 +216,23 @@ MAIN: PROCESS(clock, reset)
                 WHEN "010" =>       --Receiving the data
                     IF (manchester1_idle='1'AND manchester2_idle='1') THEN    --Data completely received
 
-                        uart_activate <= '1' ;      --Stays on for 2 clock cycles i.e. this state and when rxaction is 011.
                                         
-                        IF ( (main_data_bus_line_for_all_in = temp_trans_in) AND symbol_count >= memory_size ) THEN      --We successfully received all
+                        IF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND (symbol_count >= memory_size) ) THEN      --We successfully received all in transmitter ROM
                             rxaction <= "100" ;
 
-                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND symbol_count < memory_size ) THEN      --An error in received data
+                        ELSIF ( (main_data_bus_line_for_all_in /= temp_trans_in) AND (symbol_count < memory_size) ) THEN      --An error in received data
                             symbol_error_count <= symbol_error_count + 1 ;
                             rxaction <= "011" ;
 
-                        ELSIF ( (main_data_bus_line_for_all_in = x"FFFFFFFF") AND symbol_count > memory_size ) THEN     --Received all for sure
-                            rxaction <= "101" ;
+                        ELSIF ( (main_data_bus_line_for_all_in = temp_trans_in) AND (symbol_count < memory_size) ) THEN     --Normal good data
+                            rxaction <= "011" ;
                             
                         ELSE
-                            rxaction <= "010" ;
+                            rxaction <= "111" ;
 
                         END IF;
+                        
+                        loader_activate <= '1' ;
                         
                         symbol_count <= symbol_count + 1 ;
 
@@ -295,6 +240,7 @@ MAIN: PROCESS(clock, reset)
                     
                 WHEN "011" =>       --Received state. Load the comparison line and do other stuff
                     srom_querry <= '1' ;
+                    loader_activate <= '0' ;
 
                     IF (rx_mode = '1') THEN
                         rxaction <= "001" ;
@@ -370,27 +316,15 @@ PORT MAP (
     LED_out => cathode
 );
 
-PCCONN: uart
-GENERIC MAP (clk_freq => master_clock, baud_rate => uart_baud_rate, d_width => uart_d_width)
-PORT MAP (
-    clk => clock,  
-    tx_ena => uart_tx_ena, 
-    tx_data => uart_data_bus_tx,
-    rx => uart_rx, 
-    rx_busy => uart_rx_busy, 
-    rx_error => uart_rx_error, 
-    rx_data => uart_data_bus_rx,
-    tx_busy => uart_tx_busy,
-    tx => uart_tx
-);  
 
 BITCONN: loader32_to_8
 PORT MAP (
-    bits8 => uart_data_bus_tx,
     clock => clock,
     reset => global_reset_line,
-    ready => loader_is_ready,
-    fetch => loader_activate,
-    bits32 =>  main_data_bus_line_for_all_in   
+    idle => loader_is_idle,
+    trigger => loader_activate,
+    bits32 =>  main_data_bus_line_for_all_in,
+    uart_rx => uart_rx,
+    uart_tx => uart_tx  
 );
 END monarch;
