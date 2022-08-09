@@ -143,6 +143,8 @@ BEGIN
     led_idle <= idle_line ;
 
     idle_line <= clock_1Hz_line WHEN rxaction="000" OR rxaction="001" OR loader_is_idle='1' ELSE '1' ;
+
+    loader_activate <= '1' WHEN rxaction="010" AND manchester1_idle='1'AND manchester2_idle='1' ELSE
     
     --display_bus <= STD_LOGIC_VECTOR(symbol_error_count) ;
    
@@ -150,14 +152,12 @@ BEGIN
     man2_temp <= not man2_in ;
 
   
-SYMERRORVIEW: PROCESS(clock_1Hz_line, reset)
+UARTCOMMS: PROCESS(clock, reset)
     BEGIN
-        IF (reset='1') THEN
-            symbol_count_reset <= '0' ;
-        ELSIF (clock_1Hz_line='1') THEN
-            symbol_count_reset <= '1' ;  
+        IF (RISING_EDGE(clock) AND rxaction="010" AND manchester1_idle='1'AND manchester2_idle='1') THEN
+            loader_activate <= '1' ;
         ELSE
-            symbol_count_reset <= '0' ;
+            loader_activate <= '0' ;
         END IF;
     END PROCESS;    
 
