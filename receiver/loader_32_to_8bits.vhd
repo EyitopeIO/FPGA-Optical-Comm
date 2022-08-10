@@ -11,13 +11,19 @@ ENTITY loader32_to_8 IS
         uart_d_width : INTEGER := 8 
     );
     PORT (
-        clock : IN STD_LOGIC ;
-        
+        clock : IN STD_LOGIC ;      
         reset : IN STD_LOGIC ;
-        idle : OUT STD_LOGIC ;
+        
+        busy : OUT STD_LOGIC ;
         trigger : IN STD_LOGIC ;
 
-        bits32 : IN STD_LOGIC_VECTOR(31 DOWNTO 0) ;    
+        bits32 : IN STD_LOGIC_VECTOR(31 DOWNTO 0) ;
+            
+--        ubus : OUT STD_LOGIC_VECTOR(7 DOWNTO 0) ;
+--        txena : OUT STD_LOGIC ;
+--        txbyten : OUT STD_LOGIC_VECTOR(2 DOWNTO 0) ;
+--        txb : OUT STD_LOGIC ;
+
         
         uart_rx : IN STD_LOGIC ;
         uart_tx : OUT STD_LOGIC
@@ -46,73 +52,99 @@ ARCHITECTURE loader328 OF loader32_to_8 IS
     END COMPONENT;
 
     SIGNAL input_line : STD_LOGIC_VECTOR(31 DOWNTO 0) := x"00000000" ;
-    SIGNAL byten : UNSIGNED(2 DOWNTO 0) := "111" ;
-    SIGNAL bytxt : UNSIGNED(1 DOWNTO 0) := "00" ;
+    SIGNAL byten : UNSIGNED(2 DOWNTO 0) := "000" ;
+    SIGNAL byten_next : UNSIGNED(2 DOWNTO 0) := "000" ;
+    SIGNAL busyline : STD_LOGIC := '0' ;
 
     SIGNAL uart_rx_error : STD_LOGIC ;
     SIGNAL uart_rx_busy : STD_LOGIC ;
     SIGNAL uart_tx_busy : STD_LOGIC ;
     SIGNAL uart_tx_ena : STD_LOGIC := '0' ;
-    SIGNAL bits8 : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) ;
+    SIGNAL uart_nx_byte : STD_LOGIC ; 
+
+    SIGNAL uart_tx_tmp1 : STD_LOGIC := '0' ;
+    SIGNAL bits8 : STD_LOGIC_VECTOR(uart_d_width-1 DOWNTO 0) := x"00" ;
 
 BEGIN
 
-MAIN: PROCESS(clock, reset, trigger)
+--    busy <= busyline ;
+--    ubus <= bits8 ;
+--    txena <= uart_tx_ena ;
+--    txb <= uart_tx_busy ;
+--    txbyten <= STD_LOGIC_VECTOR(byten) ;
+
+MAIN: PROCESS(clock, reset, trigger, input_line, byten_next, uart_tx_busy)
     BEGIN
         IF (reset='1') THEN
-            bits8 <= x"00" ;
-            uart_tx_ena <= '0' ;
-            idle <= '1' ;
+            input_line <= x"00000000" ;
+            busyline <= '0' ;
             byten <= "000" ;
+            uart_tx_ena <= '0' ;
 
         ELSIF RISING_EDGE(clock) THEN
 
-                CASE byten IS
-                ------------------------------------------------------------------------------
-                    WHEN "000" =>       --Waiting for first activity
-                        IF (trigger='1' AND uart_tx_busy='0') THEN
-                            input_line <= bits32 ;      --Only latch on to input line here
-                            byten <= "001" ;
-                            idle <= '0' ; 
-                        ELSE
-                            idle <= '1' ;
-                        END IF;
-                    -------------------------------------------------------------------------------
-                    WHEN "001" =>       --Enable the UART
+            CASE byten IS
+                WHEN "000" =>
+                    IF (trigger='1') THEN
+                        input_line <= bits32 ;
                         uart_tx_ena <= '1' ;
-                        CASE bytxt IS
-                            WHEN "00" =>      
-                                bits8 <= input_line(31 DOWNTO 24) ;
-                                bytxt <= "01" ;                  
-                            WHEN "01" =>
-                                bits8 <= input_line(23 DOWNTO 16) ;
-                                bytxt <= "10" ;
-                            WHEN "10" =>
-                                bits8 <= input_line(15 DOWNTO 8) ; 
-                                bytxt <= "11" ;
-                            WHEN "11" =>
-                                bits8 <= input_line(7 DOWNTO 0) ;
-                                bytxt <= "00" ;
-                        END CASE;
-                    ------------------------------------------------------------------------------
-                        IF (uart_tx_busy='1') THEN
-                            byten <= "010" ;
-                        END IF;
-                    ------------------------------------------------------------------------------
-                    WHEN "010" =>       --Wait for UART to go idle again
-                        uart_tx_ena <= '0' ;
-                        IF (uart_tx_busy='0') THEN
-                            IF (bytxt="00") THEN       --If we had just sent the final byte
-                                byten <= "000" ;
-                            ELSE
-                                byten <= "001" ;
-                            END IF;
-                        END IF;
-                    ------------------------------------------------------------------------------
-                    WHEN OTHERS =>
-                        byten <= "000" ;
-                    ------------------------------------------------------------------------------
-                END CASE;
+                        busyline <= '1' ;
+                        byten_next <= "001" ;
+                        byten <= "110" ;
+                    END IF;
+                    
+                WHEN "001" =>
+                    uart_tx_ena <= '0' ;
+                    bits8 <= input_line(31 DOWNTO 24) ;
+                    IF (uart_tx_busy='0') THEN
+                        uart_tx_ena <= '1' ;
+                        byten_next <= "010" ;
+                        byten <= "110" ;
+                    END IF;
+                    
+                WHEN "010" =>
+                    uart_tx_ena <= '0' ;
+                    bits8 <= input_line(23 DOWNTO 16) ;            
+                    IF (uart_tx_busy='0') THEN
+                        uart_tx_ena <= '1' ;
+                        byten_next <= "011" ;
+                        byten <= "110" ;
+                    END IF;
+                    
+                WHEN "011" =>
+                    uart_tx_ena <= '0' ;                
+                    bits8 <= input_line(15 DOWNTO 8) ;
+                    IF (uart_tx_busy='0') THEN
+                        uart_tx_ena <= '1' ;                    
+                        byten_next <= "100" ;
+                        byten <= "110" ;
+                    END IF;          
+                       
+                WHEN "100" =>
+                    uart_tx_ena <= '0' ;                
+                    bits8 <= input_line(7 DOWNTO 0) ;         
+                    IF (uart_tx_busy='0') THEN
+                        uart_tx_ena <= '1' ;                    
+                        byten_next <= "101" ;
+                        byten <= "110" ;
+                    END IF; 
+                    
+                WHEN "101" =>           --Final state
+                    uart_tx_ena <= '0' ;                
+                    IF (uart_tx_busy='0') THEN
+                        byten_next <= "000" ;
+                        byten <= "110" ;
+                        busyline <= '0' ;
+                    END IF;
+                                        
+                WHEN "110" =>           --For empty clock cycle
+                    byten <= byten_next ;
+                    
+                WHEN OTHERS =>          --Never happening
+                    busyline <= '1' ;
+                    byten <= "111" ;
+
+            END CASE;
         END IF;
 END PROCESS;
 

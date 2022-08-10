@@ -29,6 +29,7 @@ ARCHITECTURE srarch OF srom IS
 BEGIN
 
 ROMSOURCING: PROCESS(clock)
+        
         VARIABLE cnt : INTEGER RANGE 0 TO 404 := 0 ;
     BEGIN 
     
@@ -41,7 +42,7 @@ ROMSOURCING: PROCESS(clock)
         ELSIF (clock'EVENT AND clock='1') THEN
             IF (querry='1') THEN
                 data <= data_bus ;
-                IF (cnt < 403) THEN  -- address above 11 causes FF... on data bus
+                IF (cnt < 404) THEN  -- address above 11 causes FF... on data bus
                     cnt := cnt + 1 ;
                 END IF;
             END IF;

@@ -9,6 +9,7 @@ ENTITY rom IS
     );
 END rom;
 
+    --There are 404 elements
 
 ARCHITECTURE romarch OF rom IS
     TYPE ro_memory IS ARRAY (0 TO 403) OF STD_LOGIC_VECTOR(31 DOWNTO 0) ;

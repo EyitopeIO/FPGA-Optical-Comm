@@ -31,8 +31,9 @@ FREQ_1Hz:       PROCESS(clock_100MHz)
             IF (counter_100000000 = (count_100000000 - 1)) THEN            
                 line_1Hz <= NOT line_1Hz;
                 counter_100000000 := 0 ;
+            ELSE
+                counter_100000000 := counter_100000000 + 1;
             END IF;
-            counter_100000000 := counter_100000000 + 1;
         END IF;
     END PROCESS;
 
@@ -44,8 +45,9 @@ FREQ_70kHz: PROCESS(clock_100MHz)
             IF (counter_70_000 = (count_70_000 - 1)) THEN
                 line_70kHz <= not line_70kHz ;
                 counter_70_000 := 0 ;
-            END IF ;
-            counter_70_000 := counter_70_000 + 1 ;
+            ELSE
+                counter_70_000 := counter_70_000 + 1 ;
+            END IF;
         END IF ;
     END PROCESS ;
     
@@ -58,8 +60,9 @@ FREQ_1p3615MHz: PROCESS(clock_100MHz)
                 IF (counter_10_000_000 = (count_10_000_000 - 1)) THEN
                     line_10MHz <= not line_10MHz ;
                     counter_10_000_000 := 0 ;
-                END IF ;
-                counter_10_000_000 := counter_10_000_000 + 1 ;
+                ELSE
+                    counter_10_000_000 := counter_10_000_000 + 1 ;
+                END IF;
             END IF ;
         END PROCESS ;    
 END clock_architecture;
